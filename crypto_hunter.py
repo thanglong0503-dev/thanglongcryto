@@ -3,270 +3,293 @@ import pandas as pd
 import pandas_ta as ta
 import ccxt
 import plotly.graph_objects as go
-from datetime import datetime
 import time
 
 # ==========================================
-# 1. CẤU HÌNH HỆ THỐNG (SYSTEM CONFIG)
+# 1. SYSTEM CONFIGURATION (PROFESSIONAL MODE)
 # ==========================================
 st.set_page_config(
     layout="wide", 
-    page_title="Crypto Hunter V1", 
-    page_icon="🐲",
+    page_title="Terminal Pro", 
+    page_icon="📈",
     initial_sidebar_state="expanded"
 )
 
-# Giao diện Dark Mode & Hacker Style
+# CSS: Bloomberg Terminal Style
 st.markdown("""
 <style>
-    /* Font chữ */
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-    html, body, [class*="css"] {font-family: 'JetBrains Mono', monospace;}
-    
-    /* Card thông số */
-    .metric-card {
-        background-color: #111;
-        border: 1px solid #333;
-        border-radius: 8px;
-        padding: 15px;
-        text-align: center;
-        margin-bottom: 10px;
-        box-shadow: 0 0 10px rgba(0,255,0,0.1);
+    /* Global Font */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Roboto Mono', monospace;
+        background-color: #0e1117;
+        color: #e0e0e0;
     }
-    .metric-value {font-size: 24px; font-weight: bold; color: #00ff00;}
-    .metric-label {font-size: 14px; color: #888;}
     
-    /* Highlight Tín hiệu */
-    .signal-buy {color: #00ff00; font-weight: bold; padding: 5px; border: 1px solid #00ff00; border-radius: 4px;}
-    .signal-sell {color: #ff0000; font-weight: bold; padding: 5px; border: 1px solid #ff0000; border-radius: 4px;}
+    /* Metrics Styling */
+    div[data-testid="stMetric"] {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        padding: 15px;
+        border-radius: 4px;
+    }
+    label[data-testid="stMetricLabel"] {
+        color: #8b949e;
+        font-size: 0.8rem;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+        color: #f0f6fc;
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #010409;
+        border-right: 1px solid #30363d;
+    }
     
-    /* Tinh chỉnh bảng */
-    [data-testid="stDataFrame"] {border: 1px solid #333;}
+    /* Table Styling */
+    div[data-testid="stDataFrame"] {
+        border: 1px solid #30363d;
+    }
+    
+    /* Buttons */
+    button[kind="primary"] {
+        background-color: #238636;
+        border: none;
+        border-radius: 4px;
+        color: white;
+        transition: 0.2s;
+    }
+    button[kind="primary"]:hover {
+        background-color: #2ea043;
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        font-family: 'Roboto Mono', monospace;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+    
+    /* Alert Boxes */
+    div.stAlert {
+        border-radius: 4px;
+        border: 1px solid #30363d;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. KẾT NỐI DỮ LIỆU (DATA ENGINE)
+# 2. DATA ENGINE (ROBUST FETCHING)
 # ==========================================
 @st.cache_resource
 def init_exchange():
-    """Khởi tạo kết nối Binance (Public API - Không cần Key)"""
+    """Initialize Binance connection securely"""
     return ccxt.binance({
-        'enableRateLimit': True, 
-        'options': {'defaultType': 'future'} # Ưu tiên dữ liệu Futures (hoặc spot tùy chỉnh)
+        'enableRateLimit': True,
+        'options': {'defaultType': 'spot'} # Use Spot for better stability on public API
     })
 
 exchange = init_exchange()
 
-@st.cache_data(ttl=60) # Cache 60s để không bị sàn chặn IP
-def get_top_coins(limit=30):
-    """Lấy danh sách Top Coin theo Volume"""
+@st.cache_data(ttl=300)
+def get_market_symbols(limit=50):
+    """Fetch active USDT pairs"""
     try:
+        if not exchange.has['fetchTickers']:
+            return ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+            
         tickers = exchange.fetch_tickers()
-        # Lọc cặp USDT và Volume lớn
-        symbols = [s for s in tickers if s.endswith('/USDT')]
+        # Filter strictly for USDT pairs and sort by Volume
+        symbols = [
+            s for s in tickers 
+            if '/USDT' in s and 'UP/' not in s and 'DOWN/' not in s
+        ]
         sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'], reverse=True)
         return sorted_symbols[:limit]
-    except:
-        return ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT']
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
+        return ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
 
-@st.cache_data(ttl=30)
-def fetch_data(symbol, timeframe, limit=100):
-    """Lấy dữ liệu nến OHLCV"""
+def fetch_ohlcv_data(symbol, timeframe, limit=100):
+    """Fetch Candle Data with Error Handling"""
     try:
-        bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        # Retry mechanism
+        for _ in range(3):
+            try:
+                bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+                break
+            except ccxt.NetworkError:
+                time.sleep(1)
+        else:
+            return pd.DataFrame() # Return empty if fails 3 times
+
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
         return df
-    except:
+    except Exception as e:
+        st.error(f"Data Fetch Error for {symbol}: {str(e)}")
         return pd.DataFrame()
 
 # ==========================================
-# 3. BỘ NÃO PHÂN TÍCH (AI ANALYZER)
+# 3. ANALYTICS ENGINE
 # ==========================================
-def analyze_market(df):
-    """Tính toán chỉ báo kỹ thuật"""
-    if df.empty: return None
+def calculate_indicators(df):
+    if df.empty: return df
     
-    # RSI
+    # Trend Indicators
+    df.ta.ema(length=50, append=True)  # Mid-term trend
+    df.ta.ema(length=200, append=True) # Long-term trend
+    
+    # Momentum
     df.ta.rsi(length=14, append=True)
-    # Bollinger Bands
+    
+    # Volatility
     df.ta.bbands(length=20, std=2, append=True)
-    # MACD
-    df.ta.macd(fast=12, slow=26, signal=9, append=True)
-    # EMA
-    df.ta.ema(length=34, append=True)
-    df.ta.ema(length=89, append=True)
     
     return df
 
-def scan_worker(symbols, timeframe):
-    """Máy quét hoạt động ngầm"""
-    report = []
-    my_bar = st.progress(0)
+# ==========================================
+# 4. PROFESSIONAL UI LAYOUT
+# ==========================================
+
+# --- SIDEBAR ---
+st.sidebar.markdown("### ⚙️ SETTINGS")
+app_mode = st.sidebar.selectbox("VIEW MODE", ["Market Dashboard", "Alpha Scanner"])
+st.sidebar.markdown("---")
+global_tf = st.sidebar.selectbox("TIMEFRAME", ['15m', '1h', '4h', '1d'], index=2)
+global_limit = st.sidebar.slider("DATA POINTS", 50, 500, 200)
+
+# --- MAIN: DASHBOARD ---
+if app_mode == "Market Dashboard":
+    st.title("MARKET OVERVIEW")
     
-    for i, sym in enumerate(symbols):
-        # Update progress
-        my_bar.progress((i+1)/len(symbols))
+    # 1. Ticker Selection
+    market_coins = get_market_symbols(50)
+    selected_symbol = st.selectbox("SELECT ASSET", market_coins, index=0)
+    
+    # 2. Data Fetching
+    with st.spinner("Fetching market data..."):
+        df = fetch_ohlcv_data(selected_symbol, global_tf, global_limit)
         
-        df = fetch_data(sym, timeframe, limit=50)
-        if not df.empty:
-            df = analyze_market(df)
-            curr = df.iloc[-1]
-            prev = df.iloc[-2]
-            
-            # 1. Logic RSI
-            rsi = curr['RSI_14']
-            rsi_status = "Neutral"
-            if rsi < 30: rsi_status = "Oversold (MUA)"
-            elif rsi > 70: rsi_status = "Overbought (BÁN)"
-            
-            # 2. Logic Volume Đột biến
-            vol_avg = df['volume'].rolling(20).mean().iloc[-1]
-            vol_spike = curr['volume'] / vol_avg if vol_avg > 0 else 0
-            
-            # 3. Logic Xu Hướng (EMA)
-            trend = "Tăng" if curr['close'] > curr['EMA_34'] else "Giảm"
-            
-            # Chỉ lấy những coin có biến động
-            report.append({
-                "Coin": sym,
-                "Giá": curr['close'],
-                "RSI": rsi,
-                "Vol Spike": vol_spike,
-                "Trend": trend,
-                "Tín Hiệu": rsi_status
-            })
-            
-    my_bar.empty()
-    return pd.DataFrame(report)
-
-# ==========================================
-# 4. GIAO DIỆN NGƯỜI DÙNG (UI/UX)
-# ==========================================
-st.sidebar.title("🐲 CRYPTO HUNTER")
-st.sidebar.write("---")
-
-# Menu chọn chế độ
-mode = st.sidebar.radio("CHẾ ĐỘ HOẠT ĐỘNG:", ["📊 Dashboard Realtime", "📡 Máy Quét (Scanner)"])
-
-st.sidebar.write("---")
-# Cấu hình chung
-timeframe = st.sidebar.selectbox("Khung Thời Gian:", ['15m', '1h', '4h', '1d'], index=2)
-top_n = st.sidebar.slider("Số lượng Coin quét:", 10, 50, 20)
-
-# --- CHẾ ĐỘ 1: DASHBOARD ---
-if mode == "📊 Dashboard Realtime":
-    st.title(f"📊 DASHBOARD: {timeframe}")
-    
-    # Chọn Coin để soi
-    available_coins = get_top_coins(50)
-    selected_coin = st.selectbox("🔍 Chọn Coin để soi chart:", available_coins, index=0)
-    
-    if st.button("🔄 Cập nhật dữ liệu"):
-        st.cache_data.clear()
-        st.rerun()
-
-    # Lấy dữ liệu
-    df = fetch_data(selected_coin, timeframe, limit=150)
-    
     if not df.empty:
-        df = analyze_market(df)
-        curr = df.iloc[-1]
-        change_pct = (curr['close'] - df.iloc[-2]['close']) / df.iloc[-2]['close'] * 100
+        df = calculate_indicators(df)
+        last_close = df['close'].iloc[-1]
+        prev_close = df['close'].iloc[-2]
+        pct_change = (last_close - prev_close) / prev_close * 100
+        vol_24h = df['volume'].sum()
         
-        # 1. Hiển thị thông số Top
-        c1, c2, c3, c4 = st.columns(4)
-        c1.markdown(f'<div class="metric-card"><div class="metric-label">Giá Hiện Tại</div><div class="metric-value">{curr["close"]:.4f}</div></div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="metric-card"><div class="metric-label">Thay đổi 1 nến</div><div class="metric-value" style="color: {"#00ff00" if change_pct>0 else "#ff0000"}">{change_pct:+.2f}%</div></div>', unsafe_allow_html=True)
-        c3.markdown(f'<div class="metric-card"><div class="metric-label">RSI (14)</div><div class="metric-value">{curr["RSI_14"]:.1f}</div></div>', unsafe_allow_html=True)
-        c4.markdown(f'<div class="metric-card"><div class="metric-label">Vol Spike</div><div class="metric-value">{curr["volume"]/df["volume"].rolling(20).mean().iloc[-1]:.1f}x</div></div>', unsafe_allow_html=True)
+        # 3. Metrics Row
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("LAST PRICE", f"{last_close:,.4f}", f"{pct_change:+.2f}%")
+        m2.metric("RSI (14)", f"{df['RSI_14'].iloc[-1]:.1f}")
+        m3.metric("EMA Trend", "BULLISH" if last_close > df['EMA_200'].iloc[-1] else "BEARISH")
+        m4.metric("VOLUME", f"{vol_24h:,.0f}")
         
-        # 2. Vẽ Chart Nến xịn sò
+        # 4. Professional Chart
         fig = go.Figure()
         
-        # Nến Nhật
-        fig.add_trace(go.Candlestick(x=df.index,
-                        open=df['open'], high=df['high'],
-                        low=df['low'], close=df['close'],
-                        name='Price'))
+        # Candlestick
+        fig.add_trace(go.Candlestick(
+            x=df.index,
+            open=df['open'], high=df['high'],
+            low=df['low'], close=df['close'],
+            name='Price',
+            increasing_line_color='#238636', # Professional Green
+            decreasing_line_color='#da3633'  # Professional Red
+        ))
         
-        # Bollinger Bands
-        fig.add_trace(go.Scatter(x=df.index, y=df['BBU_20_2.0'], line=dict(color='rgba(255, 255, 255, 0.3)', width=1), name='Upper BB'))
-        fig.add_trace(go.Scatter(x=df.index, y=df['BBL_20_2.0'], line=dict(color='rgba(255, 255, 255, 0.3)', width=1), name='Lower BB'))
+        # Indicators
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_50'], line=dict(color='#a371f7', width=1), name='EMA 50'))
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_200'], line=dict(color='#2f81f7', width=1.5), name='EMA 200'))
         
-        # EMA
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_34'], line=dict(color='#f0b90b', width=1.5), name='EMA 34 (Vàng)'))
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_89'], line=dict(color='#00b894', width=1.5), name='EMA 89 (Xanh)'))
+        # BB
+        fig.add_trace(go.Scatter(x=df.index, y=df['BBU_20_2.0'], line=dict(color='rgba(139, 148, 158, 0.3)', width=1), name='UBB', showlegend=False))
+        fig.add_trace(go.Scatter(x=df.index, y=df['BBL_20_2.0'], line=dict(color='rgba(139, 148, 158, 0.3)', width=1), name='LBB', showlegend=False, fill='tonexty'))
 
         fig.update_layout(
-            height=650, 
-            template="plotly_dark", 
-            title=f"{selected_coin} - {timeframe}",
-            xaxis_rangeslider_visible=False,
-            margin=dict(l=0, r=0, t=30, b=0)
+            height=600,
+            template="plotly_dark",
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            margin=dict(l=0, r=0, t=30, b=0),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor='#30363d'),
+            xaxis_rangeslider_visible=False
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # 3. Order Book & Data (Demo text)
-        st.info("💡 Mẹo: RSI > 70 là vùng Quá Mua (cẩn thận Short), RSI < 30 là vùng Quá Bán (canh Long).")
-
-# --- CHẾ ĐỘ 2: SCANNER ---
-elif mode == "📡 Máy Quét (Scanner)":
-    st.title("📡 MÁY QUÉT CÁ VOI (WHALE HUNTER)")
-    st.write(f"Đang cấu hình quét: Top {top_n} Coins | Khung: {timeframe}")
-    
-    col_btn, col_info = st.columns([1, 4])
-    with col_btn:
-        start_scan = st.button("🚀 KÍCH HOẠT RADAR", type="primary")
-    
-    if start_scan:
-        with st.spinner("Emo đang đi săn... Vui lòng không tắt trình duyệt..."):
-            # 1. Lấy list coin
-            scan_list = get_top_coins(top_n)
+        # 5. Data Table
+        with st.expander("RAW DATA & INDICATORS"):
+            st.dataframe(df.sort_index(ascending=False).style.format("{:.4f}"), use_container_width=True)
             
-            # 2. Chạy quét
-            result_df = scan_worker(scan_list, timeframe)
+    else:
+        st.error(f"Unable to fetch data for {selected_symbol}. Possible network restriction on Streamlit Cloud.")
+        st.info("Try refreshing the page or checking requirements.txt")
+
+# --- MAIN: SCANNER ---
+elif app_mode == "Alpha Scanner":
+    st.title("ALPHA SCANNER")
+    st.caption(f"Scanning Top 30 Assets | Timeframe: {global_tf}")
+    
+    if st.button("RUN SCAN", type="primary"):
+        scan_list = get_market_symbols(30)
+        results = []
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, symbol in enumerate(scan_list):
+            progress_bar.progress((i+1)/len(scan_list))
+            status_text.text(f"Analyzing {symbol}...")
             
-            # 3. Hiển thị kết quả
-            if not result_df.empty:
-                # Sắp xếp ưu tiên: Vol đột biến hoặc RSI dị biệt
-                result_df['Score'] = abs(result_df['RSI'] - 50) + (result_df['Vol Spike'] * 10)
-                result_df = result_df.sort_values(by='Score', ascending=False).drop(columns=['Score'])
+            df = fetch_ohlcv_data(symbol, global_tf, limit=50)
+            if not df.empty:
+                df = calculate_indicators(df)
+                curr = df.iloc[-1]
                 
-                # Format màu sắc
-                def highlight_row(val):
-                    if val < 30: return 'color: #00ff00; font-weight: bold' # Xanh lá
-                    elif val > 70: return 'color: #ff0000; font-weight: bold' # Đỏ
-                    return ''
-
-                def highlight_vol(val):
-                    if val > 2.0: return 'color: #f0b90b; font-weight: bold' # Vàng
-                    return ''
-
-                st.subheader("🎯 MỤC TIÊU ĐÃ PHÁT HIỆN")
-                st.dataframe(
-                    result_df.style
-                    .map(highlight_row, subset=['RSI'])
-                    .map(highlight_vol, subset=['Vol Spike'])
-                    .format({"Giá": "{:.4f}", "RSI": "{:.1f}", "Vol Spike": "{:.2f}x"}),
-                    use_container_width=True,
-                    height=600
-                )
+                # Logic
+                rsi = curr['RSI_14']
                 
-                # Báo cáo nhanh
-                opportunities = result_df[(result_df['RSI'] < 30) | (result_df['RSI'] > 70) | (result_df['Vol Spike'] > 2.5)]
-                if not opportunities.empty:
-                    st.success(f"🔥 Phát hiện {len(opportunities)} tín hiệu mạnh!")
-                    for i, row in opportunities.iterrows():
-                        msg = f"**{row['Coin']}**: RSI {row['RSI']:.1f} | Vol {row['Vol Spike']:.1f}x -> {row['Tín Hiệu']}"
-                        if "MUA" in row['Tín Hiệu']: st.markdown(f":green[{msg}]")
-                        elif "BÁN" in row['Tín Hiệu']: st.markdown(f":red[{msg}]")
-                        else: st.markdown(f":orange[{msg}]")
-            else:
-                st.warning("Không lấy được dữ liệu. Vui lòng thử lại sau.")
+                # Calculate Volume Spike
+                vol_ma = df['volume'].rolling(20).mean().iloc[-1]
+                vol_spike = curr['volume'] / vol_ma if vol_ma > 0 else 0
+                
+                # Signal Condition
+                condition = "NEUTRAL"
+                if rsi < 30: condition = "OVERSOLD"
+                elif rsi > 70: condition = "OVERBOUGHT"
+                
+                results.append({
+                    "TICKER": symbol,
+                    "PRICE": curr['close'],
+                    "RSI": rsi,
+                    "VOL_SPIKE": vol_spike,
+                    "EMA_CONDITION": "ABOVE EMA50" if curr['close'] > curr['EMA_50'] else "BELOW EMA50",
+                    "SIGNAL": condition
+                })
+        
+        progress_bar.empty()
+        status_text.empty()
+        
+        # Display Results
+        res_df = pd.DataFrame(results)
+        if not res_df.empty:
+            # Styling
+            def color_signal(val):
+                color = '#e0e0e0'
+                if val == "OVERSOLD": color = '#238636' # Green
+                elif val == "OVERBOUGHT": color = '#da3633' # Red
+                return f'color: {color}; font-weight: bold'
 
-# Footer
-st.markdown("---")
-st.caption("Developed by ThangLong & Emo | Data provided by Binance")
+            st.dataframe(
+                res_df.style
+                .map(color_signal, subset=['SIGNAL'])
+                .format({"PRICE": "{:.4f}", "RSI": "{:.1f}", "VOL_SPIKE": "{:.2f}x"}),
+                use_container_width=True,
+                height=600
+            )
+        else:
+            st.warning("No data returned from scan.")
