@@ -36,21 +36,26 @@ with main_container:
             data = analyze_market(df)
             
             if data:
-                # --- HÀNG 1: METRICS CHÍNH (GIÁ & TÍN HIỆU) ---
+                # --- HÀNG 1: METRICS CHÍNH ---
                 m1, m2, m3, m4 = st.columns(4)
                 
-                with m1: st.markdown(f"""<div class="glass-card"><div class="metric-label">ASSET PRICE</div><div class="metric-value" style="color:var(--neon-cyan)">${data['price']:,.2f}</div></div>""", unsafe_allow_html=True)
+                with m1: st.markdown(f"""<div class="glass-card"><div class="metric-label">PRICE</div><div class="metric-value" style="color:var(--neon-cyan)">${data['price']:,.2f}</div></div>""", unsafe_allow_html=True)
                 
                 with m2: 
-                    st.markdown(f"""<div class="glass-card" style="border:1px solid {data['color']}"><div class="metric-label" style="color:{data['color']}">AI VERDICT</div><div class="metric-value" style="color:{data['color']}; font-size:24px">{data['signal']}</div></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div class="glass-card" style="border:1px solid {data['color']}"><div class="metric-label" style="color:{data['color']}">AI VERDICT</div><div class="metric-value" style="color:{data['color']}; font-size:20px">{data['signal']}</div></div>""", unsafe_allow_html=True)
                 
                 with m3:
-                    adx_col = "var(--neon-green)" if data['strength'] == "STRONG" else "#666"
-                    st.markdown(f"""<div class="glass-card"><div class="metric-label">TREND STRENGTH (ADX)</div><div class="metric-value" style="color:{adx_col}">{data['adx']:.1f} <span style="font-size:12px">({data['strength']})</span></div></div>""", unsafe_allow_html=True)
+                    # HIỂN THỊ POC (MỚI)
+                    st.markdown(f"""
+                    <div class="glass-card">
+                        <div class="metric-label">POINT OF CONTROL (POC)</div>
+                        <div class="metric-value" style="color:#ff0055">${data['poc']:,.2f}</div>
+                        <div style="font-size:12px; color:#888">{data['poc_stat']}</div>
+                    </div>""", unsafe_allow_html=True)
                     
                 with m4:
-                    vol_col = "var(--neon-pink)" if "WHALE" in data['vol_status'] else "#fff"
-                    st.markdown(f"""<div class="glass-card"><div class="metric-label">VOLUME RADAR</div><div class="metric-value" style="color:{vol_col}; font-size:20px">{data['vol_status']}</div></div>""", unsafe_allow_html=True)
+                    rsi_col = "var(--neon-green)" if data['rsi'] < 30 else ("var(--neon-pink)" if data['rsi'] > 70 else "#fff")
+                    st.markdown(f"""<div class="glass-card"><div class="metric-label">RSI</div><div class="metric-value" style="color:{rsi_col}">{data['rsi']:.1f}</div></div>""", unsafe_allow_html=True)
 
                 # --- HÀNG 2: BIỂU ĐỒ & CHI TIẾT KỸ THUẬT ---
                 c_chart, c_info = st.columns([3, 1])
