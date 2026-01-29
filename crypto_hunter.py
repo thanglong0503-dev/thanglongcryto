@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 # ==============================================================================
-# 1. UI CONFIGURATION
+# 1. UI CONFIGURATION (GIỮ NGUYÊN GIAO DIỆN)
 # ==============================================================================
 st.set_page_config(layout="wide", page_title="Oracle Alpha Scalper", page_icon="⚡", initial_sidebar_state="collapsed")
 
@@ -50,10 +50,6 @@ st.markdown("""
 
     .metric-label { font-size: 12px; color: #888; letter-spacing: 1px; }
     .metric-val { font-size: 24px; font-weight: bold; font-family: 'Orbitron'; }
-    .color-bull { color: var(--bull); text-shadow: 0 0 5px var(--bull); }
-    .color-bear { color: var(--bear); text-shadow: 0 0 5px var(--bear); }
-
-    .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
     
     /* INPUT FIX */
     div[data-baseweb="input"] { background-color: #1a1a1a !important; border: 1px solid #333 !important; }
@@ -63,16 +59,14 @@ st.markdown("""
     li[data-baseweb="option"] { color: #eee !important; }
     li[data-baseweb="option"]:hover { background-color: #222 !important; color: var(--accent) !important; }
     
-    /* BACKTEST TABLE */
     div[data-testid="stDataFrame"] { border: 1px solid #333; }
-    
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. ORACLE ENGINE V12 (NEW STRATEGY: BOLLINGER SCALP)
+# 2. ORACLE ENGINE V12.1 (SAFE MODE - FIX KEYERROR)
 # ==============================================================================
 class OracleEngine:
     def __init__(self):
@@ -101,63 +95,80 @@ class OracleEngine:
             return df
         except: return pd.DataFrame()
 
-    # --- INDICATORS ---
-    def calculate_pivots(self, df):
-        try:
-            h, l, c = df['h'].iloc[-1], df['l'].iloc[-1], df['c'].iloc[-1]
-            pp = (h + l + c) / 3
-            return {"R2": pp + (h-l), "R1": (2*pp)-l, "S1": (2*pp)-h, "S2": pp-(h-l)}
-        except: return None
-
-    def check_squeeze(self, df):
-        try:
-            df.ta.bbands(length=20, std=2, append=True)
-            w = (df['BBU_20_2.0'].iloc[-1] - df['BBL_20_2.0'].iloc[-1]) / df['BBM_20_2.0'].iloc[-1]
-            return "SQUEEZE (NÉN)" if w < 0.05 else "EXPANDED"
-        except: return "NORMAL"
+    # --- HÀM TÌM CỘT AN TOÀN (SAFE COLUMN FINDER) ---
+    def get_safe_col(self, df, pattern):
+        """Tìm cột bắt đầu bằng pattern (VD: 'BBL') để tránh lỗi tên"""
+        cols = [c for c in df.columns if c.startswith(pattern)]
+        return cols[0] if cols else None
 
     def analyze_live(self, symbol):
-        # Dùng khung 1H cho Scalping
+        # 1. Lấy dữ liệu
         df = self.fetch_ohlcv(symbol, '1h', 200)
-        if df.empty: return None
         
-        # Calculate Indicators
-        df.ta.bbands(length=20, std=2, append=True)
-        df.ta.rsi(length=14, append=True)
+        # 2. Kiểm tra độ dài dữ liệu (Chống lỗi Crash)
+        if df.empty or len(df) < 50: 
+            return None # Trả về None để UI biết mà xử lý
         
-        curr = df.iloc[-1]
-        
-        # Logic Scalp
-        # Mua: Giá < Lower Band & RSI < 35
-        signal = "NEUTRAL"
-        if curr['close'] < curr['BBL_20_2.0'] and curr['RSI_14'] < 35:
-            signal = "SCALP BUY ⚡"
-        # Bán: Giá > Upper Band & RSI > 65
-        elif curr['close'] > curr['BBU_20_2.0'] and curr['RSI_14'] > 65:
-            signal = "SCALP SELL ⚡"
+        # 3. Tính toán (Bọc trong try-except để an toàn tuyệt đối)
+        try:
+            df.ta.bbands(length=20, std=2, append=True)
+            df.ta.rsi(length=14, append=True)
             
-        return {
-            "df": df,
-            "signal": signal,
-            "price": curr['close'],
-            "rsi": curr['RSI_14'],
-            "bbl": curr['BBL_20_2.0'],
-            "bbu": curr['BBU_20_2.0']
-        }
+            curr = df.iloc[-1]
+            
+            # Tìm tên cột động
+            bbl_col = self.get_safe_col(df, 'BBL')
+            bbu_col = self.get_safe_col(df, 'BBU')
+            rsi_col = self.get_safe_col(df, 'RSI')
+            
+            # Nếu không tính được chỉ báo -> Return None
+            if not bbl_col or not bbu_col or not rsi_col:
+                return None
 
-    # --- 🔥 NEW: STRATEGY 2 (MEAN REVERSION) 🔥 ---
+            price = curr['c']
+            bbl_val = curr[bbl_col]
+            bbu_val = curr[bbu_col]
+            rsi_val = curr[rsi_col]
+            
+            # Logic Scalp
+            signal = "NEUTRAL (CHỜ)"
+            if price < bbl_val and rsi_val < 35:
+                signal = "SCALP BUY ⚡"
+            elif price > bbu_val and rsi_val > 65:
+                signal = "SCALP SELL ⚡"
+                
+            return {
+                "signal": signal,
+                "price": price,
+                "rsi": rsi_val,
+                "bbl": bbl_val,
+                "bbu": bbu_val
+            }
+        except Exception as e:
+            st.error(f"Lỗi tính toán: {e}")
+            return None
+
     def run_backtest(self, symbol):
-        # Lấy dữ liệu 1H (tốt cho scalp hơn 4H)
         df = self.fetch_ohlcv(symbol, '1h', limit=1000)
         
         if df.empty or len(df) < 50:
-            return None, "Không đủ dữ liệu."
+            return None, "Dữ liệu không đủ để Backtest."
             
-        # 2. Tính chỉ báo BBands + RSI
-        df.ta.bbands(length=20, std=2, append=True) # Tạo BBL, BBM, BBU
-        df['RSI'] = ta.rsi(df['c'], length=14)
+        # Tính toán an toàn
+        try:
+            bb = df.ta.bbands(length=20, std=2)
+            if bb is None: return None, "Lỗi tính BB"
+            df = pd.concat([df, bb], axis=1)
+            df['RSI'] = ta.rsi(df['c'], length=14)
+        except:
+            return None, "Lỗi thư viện chỉ báo."
+            
+        # Tìm cột
+        bbl_col = self.get_safe_col(df, 'BBL')
+        bbm_col = self.get_safe_col(df, 'BBM') # Middle Band
         
-        # 3. Giả lập
+        if not bbl_col or not bbm_col: return None, "Không tìm thấy cột chỉ báo."
+
         initial_capital = 1000
         capital = initial_capital
         position = None
@@ -168,28 +179,22 @@ class OracleEngine:
         wins = 0
         losses = 0
         
-        # Loop
         for i in range(50, len(df)):
             row = df.iloc[i]
             
-            # --- CHIẾN THUẬT MỚI: BẮT ĐÁY (Buy the Dip) ---
-            # Entry: Giá đóng cửa THẤP HƠN Lower Band VÀ RSI < 30 (Quá bán nặng)
-            long_condition = (row['c'] < row['BBL_20_2.0']) and (row['RSI'] < 30)
+            # Entry: Giá < BBL và RSI < 30
+            long_condition = (row['c'] < row[bbl_col]) and (row['RSI'] < 30)
             
-            # Exit (Take Profit): Giá hồi về đường giữa (Middle Band - SMA20) -> Chốt lời an toàn
-            tp_condition = (row['c'] >= row['BBM_20_2.0'])
+            # Exit: Giá > BBM (Hồi về giữa)
+            tp_condition = (row['c'] >= row[bbm_col])
             
-            # Xử lý Vị thế
             if position == 'LONG':
-                # Check Stoploss (Cắt lỗ cứng 3%)
                 if row['l'] <= stop_loss:
-                    pnl_pct = -3.0
-                    pnl_amt = capital * (pnl_pct/100)
+                    pnl_amt = capital * -0.03
                     capital += pnl_amt
-                    trades.append({'Type': 'STOP LOSS 🛑', 'PnL %': pnl_pct, 'Profit ($)': pnl_amt})
+                    trades.append({'Type': 'STOP LOSS 🛑', 'PnL %': -3.0, 'Profit ($)': pnl_amt})
                     losses += 1
                     position = None
-                # Check Take Profit (Chạm Middle Band)
                 elif tp_condition:
                     pnl_pct = (row['c'] - entry_price) / entry_price * 100
                     pnl_amt = capital * (pnl_pct/100)
@@ -198,14 +203,12 @@ class OracleEngine:
                     wins += 1
                     position = None
             
-            # Vào lệnh mới
             if position is None and long_condition:
                 position = 'LONG'
                 entry_price = row['c']
-                stop_loss = entry_price * 0.97 # SL 3%
+                stop_loss = entry_price * 0.97
                 trades.append({'Type': 'ENTRY LONG ⚡', 'Price': entry_price, 'Time': str(df.index[i])})
 
-        # Kết quả
         total_trades = wins + losses
         winrate = (wins / total_trades * 100) if total_trades > 0 else 0
         total_return = (capital - initial_capital) / initial_capital * 100
@@ -227,7 +230,7 @@ engine = OracleEngine()
 
 c1, c2 = st.columns([1, 5])
 with c1: st.markdown("## ⚡")
-with c2: st.markdown('<div class="oracle-header">ALPHA SCALPER v12</div>', unsafe_allow_html=True)
+with c2: st.markdown('<div class="oracle-header">ALPHA SCALPER v12.1</div>', unsafe_allow_html=True)
 
 col_search, col_list = st.columns([1, 2])
 with col_search:
@@ -257,9 +260,7 @@ with tab_live:
             with m1: st.markdown(f"""<div class="glass-card"><div class="metric-label">PRICE</div><div class="metric-val" style="color:var(--accent)">${curr_price:,.4f}</div></div>""", unsafe_allow_html=True)
             with m2: st.markdown(f"""<div class="glass-card" style="border-color:{s_color}"><div class="metric-label">SIGNAL (1H)</div><div class="metric-val" style="color:{s_color}">{signal}</div></div>""", unsafe_allow_html=True)
             
-            # Distance to Bands
             dist_lower = (curr_price - data['bbl']) / curr_price * 100
-            dist_upper = (data['bbu'] - curr_price) / curr_price * 100
             
             with m3: st.markdown(f"""<div class="glass-card"><div class="metric-label">DIST TO LOW BAND</div><div class="metric-val" style="color:#fff">{dist_lower:.2f}%</div></div>""", unsafe_allow_html=True)
             with m4: st.markdown(f"""<div class="glass-card"><div class="metric-label">RSI (1H)</div><div class="metric-val">{data['rsi']:.1f}</div></div>""", unsafe_allow_html=True)
@@ -283,58 +284,37 @@ with tab_live:
                 </div>""", height=710)
 
             with c_tools:
-                st.markdown("### ⚡ CHIẾN THUẬT VỢT ĐÁY")
-                st.info("""
-                **NGUYÊN LÝ:**
-                Mua khi giá rơi quá mạnh (Chạm dải dưới BB + RSI thấp). Bán khi giá hồi lại.
+                st.markdown("### ⚡ CHIẾN THUẬT")
+                st.info("Mua khi giá rớt khỏi dải dưới BB và RSI < 35. Bán khi giá hồi về đường giữa (SMA20).")
                 
-                **LUẬT CHƠI:**
-                1. ✅ MUA: Giá < Dải Dưới BB VÀ RSI < 35.
-                2. 🎯 CHỐT LỜI: Giá chạm Dải Giữa (Middle Band).
-                3. 🛑 CẮT LỖ: 3% hoặc khi RSI phân kỳ âm tiếp.
-                """)
-                
-                st.markdown("### 📊 KHUYẾN NGHỊ")
                 rec = "QUAN SÁT (WAIT)"
-                if dist_lower < 0.5 and data['rsi'] < 35: rec = "CHUẨN BỊ MUA (READY)"
+                if dist_lower < 0.5 and data['rsi'] < 35: rec = "CHUẨN BỊ (READY)"
                 if dist_lower < 0 and data['rsi'] < 30: rec = "MUA NGAY (ACTION)"
                 
                 rec_col = "#00ffa3" if "MUA" in rec else "#fff"
-                st.markdown(f"""
-                <div class="glass-card" style="text-align:center">
-                    <div style="font-size:12px; color:#888;">TRẠNG THÁI</div>
-                    <div style="font-size:20px; font-weight:bold; color:{rec_col}">{rec}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"""<div class="glass-card" style="text-align:center"><div style="font-size:12px; color:#888;">TRẠNG THÁI</div><div style="font-size:20px; font-weight:bold; color:{rec_col}">{rec}</div></div>""", unsafe_allow_html=True)
+        else:
+            st.warning(f"⚠️ Đang chờ dữ liệu nến cho {symbol} (hoặc mạng đang chậm). Vui lòng thử lại sau vài giây hoặc chọn coin khác.")
 
 # ================= TAB 2: BACKTEST =================
 with tab_backtest:
-    st.markdown(f"### 🔙 KIỂM TRA CHIẾN THUẬT SCALPING ({symbol})")
-    st.caption("Chiến thuật: Bollinger Reversion (Mean Reversion) | Khung 1H | Vốn $1,000")
-    
+    st.markdown(f"### 🔙 KIỂM TRA CHIẾN THUẬT ({symbol})")
     if st.button("🚀 CHẠY BACKTEST SCALP"):
-        with st.spinner("⏳ Đang test chiến thuật vợt đáy..."):
+        with st.spinner("⏳ Đang test..."):
             trades, stats = engine.run_backtest(symbol)
-            
             if stats:
                 b1, b2, b3, b4 = st.columns(4)
-                
                 res_color = "#00ffa3" if stats['return'] > 0 else "#ff0055"
-                
-                with b1: st.markdown(f"""<div class="glass-card"><div class="metric-label">LỢI NHUẬN (ROI)</div><div class="metric-val" style="color:{res_color}">{stats['return']:.2f}%</div></div>""", unsafe_allow_html=True)
-                with b2: st.markdown(f"""<div class="glass-card"><div class="metric-label">TỶ LỆ THẮNG (WINRATE)</div><div class="metric-val" style="color:#ffeb3b">{stats['winrate']:.1f}%</div></div>""", unsafe_allow_html=True)
+                with b1: st.markdown(f"""<div class="glass-card"><div class="metric-label">LỢI NHUẬN</div><div class="metric-val" style="color:{res_color}">{stats['return']:.2f}%</div></div>""", unsafe_allow_html=True)
+                with b2: st.markdown(f"""<div class="glass-card"><div class="metric-label">WINRATE</div><div class="metric-val" style="color:#ffeb3b">{stats['winrate']:.1f}%</div></div>""", unsafe_allow_html=True)
                 with b3: st.markdown(f"""<div class="glass-card"><div class="metric-label">SỐ LỆNH THẮNG</div><div class="metric-val" style="color:#00ffa3">{stats['wins']}/{stats['total_trades']}</div></div>""", unsafe_allow_html=True)
-                with b4: st.markdown(f"""<div class="glass-card"><div class="metric-label">VỐN CUỐI CÙNG</div><div class="metric-val">${stats['final']:.2f}</div></div>""", unsafe_allow_html=True)
-
-                st.line_chart(pd.DataFrame(trades)['Profit ($)'].cumsum() if trades else [])
+                with b4: st.markdown(f"""<div class="glass-card"><div class="metric-label">VỐN CUỐI</div><div class="metric-val">${stats['final']:.2f}</div></div>""", unsafe_allow_html=True)
                 
-                st.markdown("### 📝 NHẬT KÝ GIAO DỊCH")
                 if trades:
+                    st.line_chart(pd.DataFrame(trades)['Profit ($)'].cumsum())
                     st.dataframe(pd.DataFrame(trades), use_container_width=True)
-                else:
-                    st.warning("Không có tín hiệu khớp trong giai đoạn này (Thị trường có thể đang Trend mạnh, không có hồi quy).")
             else:
-                st.error(stats)
+                st.error(f"Lỗi: {stats}")
 
 st.markdown("---")
-st.caption("ALPHA SCALPER v12 | Strategy: Bollinger Mean Reversion")
+st.caption("ALPHA SCALPER v12.1 (Safe Mode) | Strategy: Bollinger Mean Reversion")
