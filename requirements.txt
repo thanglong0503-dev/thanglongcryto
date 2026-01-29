@@ -4,4 +4,4 @@ pandas_ta
 ccxt
 plotly
 numpy
-scipy
+yfinance
