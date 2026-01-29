@@ -1,6 +1,10 @@
 import streamlit.components.v1 as components
 
 def render_chart(symbol):
+    # Mapping Symbol cho TradingView
+    # Lưu ý: Volume Profile Visible Range (VPVR) là tính năng cao cấp của TradingView
+    # Nhưng ta có thể dùng phiên bản Basic là "VbP" (Volume by Price)
+    
     tv_symbol = f"BINANCE:{symbol}USDT"
     
     html_code = f"""
@@ -19,14 +23,18 @@ def render_chart(symbol):
       "toolbar_bg": "#f1f3f6",
       "enable_publishing": false,
       "backgroundColor": "#050505",
-      "gridColor": "rgba(0, 229, 255, 0.1)",
+      "gridColor": "rgba(0, 243, 255, 0.05)",
       "hide_top_toolbar": false,
       "container_id": "tv_chart",
       "studies": [
-        "SuperTrend@tv-basicstudies",
-        "MACD@tv-basicstudies",
-        "BB@tv-basicstudies"
-      ]
+        "BB@tv-basicstudies",     // Bollinger Bands
+        "RSI@tv-basicstudies",    // RSI
+        "VbPFixed@tv-basicstudies" // <--- VOLUME PROFILE (Phiên bản miễn phí)
+      ],
+      "studies_overrides": {{
+        "volume.volume.color.0": "#ff0055",
+        "volume.volume.color.1": "#00ffa3"
+      }}
       }});
       </script>
     </div>
