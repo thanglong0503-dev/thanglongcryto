@@ -23,7 +23,7 @@ def get_cyberpunk_css():
             color: var(--text-main);
         }
 
-        /* 2. SIDEBAR FULL BLACK */
+        /* 2. SIDEBAR */
         section[data-testid="stSidebar"] {
             background-color: #000000 !important;
             border-right: 1px solid #222;
@@ -42,21 +42,20 @@ def get_cyberpunk_css():
             text-shadow: 2px 2px 0px var(--neon-pink), -2px -2px 0px var(--neon-cyan);
         }
 
-        /* 4. GLASS CARDS (KHÔI PHỤC THẺ KÍNH) */
+        /* 4. GLASS CARDS */
         .glass-card {
-            background: rgba(10, 10, 10, 0.85);
-            border: 1px solid rgba(0, 243, 255, 0.2);
+            background: #0a0a0a; /* Nền đen đặc hơn để tránh lẫn màu */
+            border: 1px solid rgba(0, 243, 255, 0.3);
             padding: 15px;
             margin-bottom: 10px;
             position: relative;
-            backdrop-filter: blur(5px);
         }
         .glass-card::before {
             content: ''; position: absolute; top: -1px; left: -1px; width: 8px; height: 8px;
             border-top: 2px solid var(--neon-cyan); border-left: 2px solid var(--neon-cyan);
         }
         
-        /* 5. TRADING ROW (BẢNG ĐIỆN TỬ) */
+        /* 5. TRADING ROW */
         .trade-row {
             display: flex; align-items: center;
             background: rgba(5, 5, 5, 0.9);
@@ -68,11 +67,18 @@ def get_cyberpunk_css():
             border-left: 4px solid var(--neon-cyan);
         }
         
-        /* 6. POPUP DIALOG FIX */
+        /* 6. FIX POPUP DIALOG (QUAN TRỌNG) */
         div[data-testid="stDialog"] {
-            background-color: #050505 !important;
+            background-color: #000000 !important; /* Ép nền đen tuyệt đối */
             border: 1px solid var(--neon-cyan);
-            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            color: #fff !important;
+        }
+        div[data-testid="stDialog"] div[data-testid="stMarkdownContainer"] p {
+            color: #e0e0e0 !important; /* Ép chữ trắng */
+        }
+        /* Ẩn nút đóng mặc định xấu xí nếu muốn, hoặc chỉnh màu */
+        button[aria-label="Close"] {
+            color: var(--neon-pink) !important;
         }
         
         /* Button Style */
@@ -81,7 +87,6 @@ def get_cyberpunk_css():
             color: var(--neon-cyan) !important;
             background: #000 !important;
             font-family: 'Orbitron' !important;
-            transition: 0.3s !important;
         }
         button:hover {
             border-color: var(--neon-cyan) !important;
