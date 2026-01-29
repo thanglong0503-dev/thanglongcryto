@@ -138,5 +138,36 @@ def get_cyberpunk_css():
         ::-webkit-scrollbar-track { background: #000; }
         ::-webkit-scrollbar-thumb { background: #333; border: 1px solid #000; }
         ::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); }
+        /* ... (Giữ nguyên các CSS cũ) ... */
+
+        /* CSS CHO SIDEBAR (THANH MENU TRÁI) */
+        section[data-testid="stSidebar"] {
+            background-color: #000 !important;
+            border-right: 1px solid #333;
+        }
+        
+        /* Chỉnh màu chữ trong Sidebar */
+        section[data-testid="stSidebar"] .stMarkdown {
+            color: #fff !important;
+        }
+        
+        /* Hiệu ứng cho nút Radio (Menu chọn) */
+        div[role="radiogroup"] label {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            transition: 0.3s;
+        }
+        div[role="radiogroup"] label:hover {
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan) !important;
+        }
+        div[role="radiogroup"] [data-checked="true"] {
+            background: linear-gradient(90deg, rgba(0, 229, 255, 0.2), transparent) !important;
+            border-left: 3px solid var(--neon-cyan) !important;
+            font-weight: bold;
+        }
     </style>
     """
