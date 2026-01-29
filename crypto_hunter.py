@@ -2,356 +2,549 @@ import streamlit as st
 import pandas as pd
 import pandas_ta as ta
 import ccxt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
 import time
-import streamlit.components.v1 as components 
+from datetime import datetime
+import streamlit.components.v1 as components
 
-# ==========================================
-# 1. CẤU HÌNH HỆ THỐNG (V5 - WHALE RADAR)
-# ==========================================
+# ==============================================================================
+# 1. QUANTUM UI CONFIGURATION (CẤU HÌNH GIAO DIỆN SIÊU CẤP)
+# ==============================================================================
 st.set_page_config(
-    layout="wide", 
-    page_title="Crypto Terminal Pro", 
-    page_icon="🏦", 
-    initial_sidebar_state="expanded"
+    layout="wide",
+    page_title="ThangLong Quantum Terminal",
+    page_icon="🐲",
+    initial_sidebar_state="collapsed" # Mặc định đóng sidebar cho rộng
 )
 
-# CSS "BÊ TÔNG CỐT THÉP" (Giữ nguyên từ V3.6)
+# CSS MAGIC: Biến Streamlit thành Bloomberg Terminal
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-    
-    /* GLOBAL DARK THEME */
-    .stApp { background-color: #0b0e11 !important; color: #eaecef !important; font-family: 'Roboto', sans-serif; }
-    header[data-testid="stHeader"] { background: #0b0e11 !important; }
+    /* IMPORT FONT HACKER */
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@500;700&display=swap');
 
-    /* INPUT & SELECTBOX FIX */
+    /* --- ROOT VARIABLES --- */
+    :root {
+        --bg-color: #050505;
+        --card-bg: #111111;
+        --accent-color: #00f2ff; /* Cyber Blue */
+        --neon-green: #00ff41;
+        --neon-red: #ff0055;
+        --text-color: #e0e0e0;
+        --border-color: #333;
+    }
+
+    /* --- GLOBAL STYLES --- */
+    .stApp {
+        background-color: var(--bg-color) !important;
+        color: var(--text-color) !important;
+        font-family: 'Rajdhani', sans-serif !important;
+    }
+    
+    /* HEADER FIX */
+    header[data-testid="stHeader"] { background: transparent !important; backdrop-filter: blur(10px); }
+
+    /* --- CUSTOM INPUTS (FIXED VISIBILITY) --- */
     div[data-baseweb="input"], div[data-baseweb="select"] > div {
-        background-color: #2b3139 !important; border: 1px solid #474d57 !important; border-radius: 4px !important;
+        background-color: #1a1a1a !important;
+        border: 1px solid #333 !important;
+        border-radius: 4px !important;
+        color: white !important;
     }
-    input[type="text"] { color: #eaecef !important; caret-color: #fcd535 !important; }
+    input[type="text"] {
+        color: var(--accent-color) !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: bold;
+    }
     
-    /* MENU DROPDOWN FIX */
-    div[data-baseweb="popover"], div[data-baseweb="menu"], ul[data-baseweb="menu"] {
-        background-color: #1e2329 !important; border: 1px solid #474d57 !important;
+    /* --- GLOWING CARDS --- */
+    .quantum-card {
+        background: rgba(17, 17, 17, 0.8);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(5px);
+        margin-bottom: 15px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
-    li[data-baseweb="option"] { color: #eaecef !important; background-color: #1e2329 !important; }
-    li[data-baseweb="option"]:hover, li[aria-selected="true"] {
-        background-color: #2b3139 !important; color: #fcd535 !important;
+    .quantum-card:hover {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
     }
 
-    /* BUTTON STYLING */
+    /* --- METRICS --- */
+    .metric-label { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-value { font-size: 32px; font-weight: 700; font-family: 'JetBrains Mono'; }
+    .text-green { color: var(--neon-green); text-shadow: 0 0 10px rgba(0,255,65,0.4); }
+    .text-red { color: var(--neon-red); text-shadow: 0 0 10px rgba(255,0,85,0.4); }
+    .text-blue { color: var(--accent-color); text-shadow: 0 0 10px rgba(0,242,255,0.4); }
+
+    /* --- BUTTONS --- */
     button[kind="primary"] {
-        background-color: #fcd535 !important; border: none !important; border-radius: 4px !important;
+        background: linear-gradient(45deg, #00f2ff, #0078ff) !important;
+        color: black !important;
+        font-weight: bold !important;
+        border: none !important;
+        text-transform: uppercase;
+        letter-spacing: 2px;
     }
-    button[kind="primary"] * { color: #000000 !important; font-weight: 800 !important; }
-    button[kind="primary"]:hover { box-shadow: 0 0 10px rgba(252, 213, 53, 0.6); }
+    button[kind="secondary"] {
+        background: transparent !important;
+        border: 1px solid var(--accent-color) !important;
+        color: var(--accent-color) !important;
+    }
 
-    /* METRIC CARDS */
-    .binance-card { background-color: #1e2329; border-radius: 6px; padding: 15px; border: 1px solid #2b3139; text-align: center; }
-    .up-green { color: #0ecb81 !important; } 
-    .down-red { color: #f6465d !important; }
-    
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] { background-color: #161a1e !important; border-right: 1px solid #2b3139; }
-    h1, h2, h3, label, .stMarkdown { color: #eaecef !important; }
-    
-    /* WHALE BAR */
-    .whale-bar-container { width: 100%; height: 20px; background-color: #f6465d; border-radius: 10px; overflow: hidden; margin-top: 5px;}
-    .whale-bar-fill { height: 100%; background-color: #0ecb81; }
+    /* --- TABS --- */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1a1a1a;
+        border-radius: 4px;
+        color: white;
+        border: 1px solid #333;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: var(--accent-color) !important;
+        color: black !important;
+        font-weight: bold;
+    }
+
+    /* --- MENU FIX --- */
+    div[data-baseweb="popover"], ul[data-baseweb="menu"] { background-color: #111 !important; border: 1px solid #444 !important; }
+    li[data-baseweb="option"] { color: white !important; }
+    li[data-baseweb="option"]:hover { background-color: var(--accent-color) !important; color: black !important; }
+
+    /* --- SCROLLBAR --- */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #050505; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. ENGINE KẾT NỐI
-# ==========================================
-@st.cache_resource
-def init_exchange():
-    try: return ccxt.binanceus({'enableRateLimit': True})
-    except: return ccxt.kraken({'enableRateLimit': True})
+# ==============================================================================
+# 2. CORE ENGINE (DATA & LOGIC)
+# ==============================================================================
+class QuantumEngine:
+    def __init__(self):
+        # Fallback mechanism: Try US, then Global (proxied via CCXT logic if needed)
+        try:
+            self.exchange = ccxt.binanceus({'enableRateLimit': True})
+            self.market_type = "SPOT (US)"
+        except:
+            self.exchange = ccxt.kraken({'enableRateLimit': True})
+            self.market_type = "SPOT (Kraken)"
+            
+    @st.cache_data(ttl=600)
+    def get_market_symbols(_self, limit=100):
+        try:
+            tickers = _self.exchange.fetch_tickers()
+            symbols = [s for s in tickers if '/USDT' in s or '/USD' in s]
+            # Sort by volume
+            sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'] if 'quoteVolume' in tickers[x] else 0, reverse=True)
+            return sorted_symbols[:limit]
+        except:
+            return ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT']
 
-exchange = init_exchange()
-
-@st.cache_data(ttl=300)
-def get_market_symbols(limit=60):
-    try:
-        tickers = exchange.fetch_tickers()
-        symbols = [s for s in tickers if '/USDT' in s or '/USD' in s]
-        sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'] if 'quoteVolume' in tickers[x] else 0, reverse=True)
-        return sorted_symbols[:limit] if symbols else ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT']
-    except: return ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT']
-
-def fetch_candle_data_backend(symbol, timeframe, limit=100):
-    try:
+    def fetch_ohlcv(self, symbol, timeframe, limit=300):
+        """Robust data fetching with retry"""
         for _ in range(3):
             try:
-                bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-                if bars: break
-            except: time.sleep(0.5)
-        else: return pd.DataFrame()
-        
-        df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
-        return df
-    except: return pd.DataFrame()
+                bars = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+                if bars:
+                    df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    df.set_index('timestamp', inplace=True)
+                    return df
+            except:
+                time.sleep(0.2)
+        return pd.DataFrame()
 
-# ==========================================
-# 3. TÍNH NĂNG MỚI: WHALE RADAR (SOI ORDER BOOK)
-# ==========================================
-def analyze_order_book(symbol):
-    """Phân tích sổ lệnh để tìm Cá mập và áp lực Mua/Bán"""
-    try:
-        # Lấy sổ lệnh 50 dòng đầu tiên (Top 50 Orders)
-        ob = exchange.fetch_order_book(symbol, limit=50)
-        
-        bids = ob['bids'] # Lệnh chờ MUA
-        asks = ob['asks'] # Lệnh chờ BÁN
-        
-        if not bids or not asks: return None
+    def fetch_order_book(self, symbol):
+        """Lấy dữ liệu Depth"""
+        try:
+            return self.exchange.fetch_order_book(symbol, limit=100)
+        except:
+            return None
 
-        # Tổng lượng tiền đang chờ Mua vs Bán (Volume)
-        total_bid_vol = sum([bid[1] for bid in bids]) # Giá x Số lượng
-        total_ask_vol = sum([ask[1] for ask in asks])
+    def analyze_indicators(self, df):
+        """Bộ não phân tích kỹ thuật"""
+        if df.empty: return df, {}
         
-        # Tính tỷ lệ áp lực mua (%)
-        total_vol = total_bid_vol + total_ask_vol
-        buy_pressure_pct = (total_bid_vol / total_vol) * 100
+        # 1. Trend
+        df.ta.ema(length=50, append=True)
+        df.ta.ema(length=200, append=True)
+        df.ta.adx(append=True)
         
-        # Tìm tường lệnh (Whale Wall) - Lệnh nào chiếm > 5% tổng volume
-        walls = []
-        for bid in bids:
-            if bid[1] > total_bid_vol * 0.05:
-                walls.append(f"🟢 BUY WALL: {bid[1]:.2f} coin tại giá {bid[0]}")
-        for ask in asks:
-            if ask[1] > total_ask_vol * 0.05:
-                walls.append(f"🔴 SELL WALL: {ask[1]:.2f} coin tại giá {ask[0]}")
-                
-        return {
-            "buy_pct": buy_pressure_pct,
-            "sell_pct": 100 - buy_pressure_pct,
-            "total_bid": total_bid_vol,
-            "total_ask": total_ask_vol,
-            "walls": walls[:3] # Lấy 3 tường to nhất
-        }
-    except Exception as e:
-        return None
+        # 2. Volatility
+        df.ta.bbands(length=20, std=2, append=True)
+        df.ta.atr(length=14, append=True)
+        
+        # 3. Momentum
+        df.ta.rsi(length=14, append=True)
+        df.ta.macd(append=True)
+        df.ta.stoch(append=True)
+        
+        # 4. Volume
+        df.ta.vwap(append=True)
+        df.ta.mfi(append=True)
 
-# ==========================================
-# 4. BỘ NÃO PHÂN TÍCH KỸ THUẬT (V4)
-# ==========================================
-def analyze_pro_signals(df):
-    if df.empty or len(df) < 52: return df, {}
-    
-    df.ta.ema(length=50, append=True)
-    df.ta.ema(length=200, append=True)
-    df.ta.rsi(length=14, append=True)
-    df.ta.supertrend(length=10, multiplier=3, append=True)
-    
-    curr = df.iloc[-1]
-    signals = {"score": 0, "details": []}
-    
-    # Logic chấm điểm
-    if curr['EMA_50'] > curr['EMA_200']: signals["score"] += 1
-    elif curr['EMA_50'] < curr['EMA_200']: signals["score"] -= 1
-        
-    st_dir = [c for c in df.columns if 'SUPERTd' in c][0]
-    if curr[st_dir] == 1: signals["score"] += 2; signals["details"].append("🚀 SuperTrend BULL")
-    else: signals["score"] -= 2; signals["details"].append("🐻 SuperTrend BEAR")
-        
-    rsi = curr['RSI_14']
-    if rsi < 30: signals["score"] += 1; signals["details"].append(f"💎 RSI Oversold ({rsi:.0f})")
-    elif rsi > 70: signals["score"] -= 1; signals["details"].append(f"⚠️ RSI Overbought ({rsi:.0f})")
-        
-    if signals["score"] >= 3: signals["rating"] = "STRONG BUY"
-    elif signals["score"] >= 1: signals["rating"] = "BUY"
-    elif signals["score"] <= -3: signals["rating"] = "STRONG SELL"
-    elif signals["score"] <= -1: signals["rating"] = "SELL"
-    else: signals["rating"] = "NEUTRAL"
-    
-    return df, signals
+        # --- SIGNAL LOGIC ---
+        curr = df.iloc[-1]
+        score = 0
+        reasons = []
 
-# ==========================================
-# 5. TRADINGVIEW WIDGET
-# ==========================================
-def render_tradingview_widget(symbol):
-    try: base_coin = symbol.split('/')[0]
-    except: base_coin = symbol
-    tv_symbol = f"BINANCE:{base_coin}USDT"
+        # RSI Logic
+        if curr['RSI_14'] < 30: score += 2; reasons.append("RSI Oversold")
+        elif curr['RSI_14'] > 70: score -= 2; reasons.append("RSI Overbought")
+
+        # Golden Cross
+        if curr['EMA_50'] > curr['EMA_200']: score += 1; reasons.append("Golden Cross (Bullish)")
+        elif curr['EMA_50'] < curr['EMA_200']: score -= 1; reasons.append("Death Cross (Bearish)")
+
+        # Bollinger Bands
+        if curr['close'] < curr['BBL_20_2.0']: score += 1; reasons.append("Price < Lower BB (Dip)")
+        elif curr['close'] > curr['BBU_20_2.0']: score -= 1; reasons.append("Price > Upper BB (Pump)")
+
+        # VWAP
+        if 'VWAP_D' in curr and curr['close'] > curr['VWAP_D']: score += 1
+        
+        rating = "NEUTRAL"
+        if score >= 3: rating = "STRONG BUY"
+        elif score >= 1: rating = "BUY"
+        elif score <= -3: rating = "STRONG SELL"
+        elif score <= -1: rating = "SELL"
+
+        return df, {"score": score, "rating": rating, "reasons": reasons}
+
+engine = QuantumEngine()
+
+# ==============================================================================
+# 3. ADVANCED VISUALIZATION FUNCTIONS (PLOTLY)
+# ==============================================================================
+def create_quantum_chart(df, symbol):
+    """Vẽ biểu đồ tương tác cao cấp"""
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                        vertical_spacing=0.05, row_heights=[0.7, 0.3])
+
+    # Candlestick
+    fig.add_trace(go.Candlestick(
+        x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'],
+        name='Price', increasing_line_color='#00ff41', decreasing_line_color='#ff0055'
+    ), row=1, col=1)
+
+    # EMA & BB
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA_50'], line=dict(color='#00f2ff', width=1), name='EMA 50'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA_200'], line=dict(color='#ff00ff', width=1), name='EMA 200'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['BBU_20_2.0'], line=dict(color='rgba(255,255,255,0.3)', dash='dot'), name='Upper BB'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['BBL_20_2.0'], line=dict(color='rgba(255,255,255,0.3)', dash='dot'), fill='tonexty', name='Lower BB'), row=1, col=1)
+
+    # Volume
+    colors = ['#00ff41' if row['close'] > row['open'] else '#ff0055' for i, row in df.iterrows()]
+    fig.add_trace(go.Bar(x=df.index, y=df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=600,
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis_rangeslider_visible=False,
+        showlegend=False
+    )
+    return fig
+
+def create_depth_chart(ob):
+    """Vẽ biểu đồ độ sâu thị trường (Market Depth)"""
+    if not ob: return None
+    bids = pd.DataFrame(ob['bids'], columns=['price', 'amount'])
+    asks = pd.DataFrame(ob['asks'], columns=['price', 'amount'])
     
-    html_code = f"""
-    <div class="tradingview-widget-container" style="height:600px;width:100%">
-      <div id="tradingview_b8d71" style="height:calc(100% - 32px);width:100%"></div>
+    bids['total'] = bids['amount'].cumsum()
+    asks['total'] = asks['amount'].cumsum()
+
+    fig = go.Figure()
+    # Phe Mua (Green)
+    fig.add_trace(go.Scatter(
+        x=bids['price'], y=bids['total'], mode='lines', 
+        fill='tozeroy', line=dict(color='#00ff41'), name='Buy Wall'
+    ))
+    # Phe Bán (Red)
+    fig.add_trace(go.Scatter(
+        x=asks['price'], y=asks['total'], mode='lines', 
+        fill='tozeroy', line=dict(color='#ff0055'), name='Sell Wall'
+    ))
+    
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        height=300, margin=dict(l=10, r=10, t=30, b=10), title="Market Depth (Liquidty)"
+    )
+    return fig
+
+# ==============================================================================
+# 4. COMPONENTS (WIDGETS)
+# ==============================================================================
+def render_tv_widget(symbol):
+    base = symbol.split('/')[0] if '/' in symbol else symbol
+    html = f"""
+    <div class="tradingview-widget-container" style="height:500px;width:100%">
+      <div id="tv_chart"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
-      new TradingView.widget(
-      {{
-      "autosize": true,
-      "symbol": "{tv_symbol}",
-      "interval": "240", 
-      "timezone": "Asia/Ho_Chi_Minh",
-      "theme": "dark", 
-      "style": "1", 
-      "locale": "vi_VN", 
-      "enable_publishing": false,
-      "backgroundColor": "#0b0e11", 
-      "gridColor": "rgba(43, 49, 57, 0.3)",
-      "hide_top_toolbar": false,
-      "hide_legend": false,
-      "save_image": true,
-      "toolbar_bg": "#1e2329",
-      "studies": ["SuperTrend@tv-basicstudies", "MACD@tv-basicstudies"],
-      "container_id": "tradingview_b8d71"
-      }}
-      );
+      new TradingView.widget({{
+      "autosize": true, "symbol": "BINANCE:{base}USDT", "interval": "60", "timezone": "Asia/Ho_Chi_Minh",
+      "theme": "dark", "style": "1", "locale": "vi_VN", "enable_publishing": false,
+      "backgroundColor": "#111111", "gridColor": "rgba(40,40,40,0.5)",
+      "hide_top_toolbar": false, "save_image": false, "container_id": "tv_chart",
+      "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+      }});
       </script>
-    </div>
-    """
-    components.html(html_code, height=610)
+    </div>"""
+    components.html(html, height=510)
 
-# ==========================================
-# 6. GIAO DIỆN CHÍNH
-# ==========================================
-st.sidebar.markdown("### 🏦 HEDGE FUND CONTROL")
-app_mode = st.sidebar.radio("CHẾ ĐỘ:", ["📈 MARKET INTELLIGENCE", "📡 SMART SCANNER AI"])
-st.sidebar.markdown("---")
-st.sidebar.caption(f"Data Source: {exchange.name}")
+# ==============================================================================
+# 5. MAIN UI LAYOUT
+# ==============================================================================
 
-st.markdown("## 🏦 CRYPTO TERMINAL <span style='color:#fcd535'>WHALE EDITION</span>", unsafe_allow_html=True)
+# --- SIDEBAR (SETTINGS) ---
+with st.sidebar:
+    st.image("https://cryptologos.cc/logos/bitcoin-btc-logo.png", width=50)
+    st.markdown("### QUANTUM SETTINGS")
+    st.markdown("---")
+    data_source = st.selectbox("Data Source", ["Binance US (Live)", "Kraken (Backup)", "Mock Data (Demo)"])
+    theme_mode = st.radio("Theme", ["Cyberpunk", "Minimalist"])
+    st.info("System Status: ONLINE 🟢")
+    st.caption("v1.0.0 - Genesis")
 
-if app_mode == "📈 MARKET INTELLIGENCE":
-    coins = get_market_symbols(60)
+# --- HEADER AREA ---
+c1, c2 = st.columns([1, 5])
+with c1:
+    st.markdown("# 🐲")
+with c2:
+    st.markdown("# THANG LONG <span style='color:#00f2ff'>QUANTUM</span> TERMINAL", unsafe_allow_html=True)
+    st.caption("AI-Powered Institutional Grade Crypto Analytics")
 
-    col_search, col_select = st.columns([1, 2])
-    with col_search:
-        st.markdown("<small>🔍 TRA CỨU MÃ</small>", unsafe_allow_html=True)
-        manual_search = st.text_input("search_input", placeholder="Nhập mã...", label_visibility="collapsed")
-    with col_select:
-        st.markdown("<small>🏆 DANH MỤC</small>", unsafe_allow_html=True)
-        safe_coins = coins if coins else ['BTC/USDT']
-        selected_from_list = st.selectbox("list_select", safe_coins, index=0, label_visibility="collapsed")
+# --- SEARCH BAR (HYBRID) ---
+search_col, list_col, tf_col = st.columns([2, 2, 1])
+with search_col:
+    manual_input = st.text_input("COMMAND LINE", placeholder="Enter Ticker (e.g. BTC)...", label_visibility="collapsed")
+with list_col:
+    coins = engine.get_market_symbols()
+    dropdown_select = st.selectbox("WATCHLIST", coins, label_visibility="collapsed")
+with tf_col:
+    timeframe = st.selectbox("TIMEFRAME", ['15m', '1h', '4h', '1d'], index=2, label_visibility="collapsed")
 
-    if manual_search:
-        raw = manual_search.upper().strip()
-        symbol = f"{raw}/USDT" if "/USDT" not in raw and "/USD" not in raw else raw
-    else:
-        symbol = selected_from_list
-    
-    st.info(f"Đang phân tích dòng tiền & kỹ thuật: **{symbol}**")
-    
-    # 1. FETCH DATA (KỸ THUẬT)
-    df_backend = fetch_candle_data_backend(symbol, '4h', 200)
-    # Fallback logic
-    if df_backend.empty and "/USDT" in symbol:
-        fallback = symbol.replace("/USDT", "/USD")
-        df_backend = fetch_candle_data_backend(fallback, '4h', 200)
-        if not df_backend.empty: symbol = fallback
+# Logic Selection
+symbol = f"{manual_input.upper()}/USDT" if manual_input else dropdown_select
+if "/USDT" not in symbol and "/USD" not in symbol: symbol += "/USDT"
 
-    # 2. FETCH DATA (DÒNG TIỀN - WHALE)
-    whale_data = analyze_order_book(symbol)
+# --- MAIN DASHBOARD TABS ---
+tab1, tab2, tab3, tab4 = st.tabs(["🚀 COCKPIT", "🧠 AI BRAIN", "🐋 WHALE RADAR", "📰 NEWS & SENTIMENT"])
 
-    if not df_backend.empty:
-        df_backend, sigs = analyze_pro_signals(df_backend)
-        curr = df_backend.iloc[-1]
-        prev = df_backend.iloc[-2]
-        change_pct = (curr['close'] - prev['close']) / prev['close'] * 100
+# ================= TAB 1: COCKPIT (OVERVIEW) =================
+with tab1:
+    # 1. Fetch Data
+    with st.spinner(f"Quantum Engine processing {symbol}..."):
+        df = engine.fetch_ohlcv(symbol, timeframe)
+        # Fallback if empty
+        if df.empty:
+            fallback = symbol.replace("/USDT", "/USD")
+            df = engine.fetch_ohlcv(fallback, timeframe)
+            if not df.empty: symbol = fallback
+
+    if not df.empty:
+        df, analysis = engine.analyze_indicators(df)
+        curr = df.iloc[-1]
+        prev = df.iloc[-2]
+        change = (curr['close'] - prev['close']) / prev['close'] * 100
         
-        # --- METRICS ---
-        m1, m2, m3, m4 = st.columns(4)
-        color_class = "up-green" if change_pct >= 0 else "down-red"
+        # 2. KPI Cards
+        k1, k2, k3, k4 = st.columns(4)
         
-        with m1: st.markdown(f"""<div class="binance-card"><div style="color:#848e9c;font-size:12px;">GIÁ (4H)</div><div style="font-size:24px;font-weight:bold;" class="{color_class}">{curr['close']:,.4f}</div></div>""", unsafe_allow_html=True)
-        with m2: st.markdown(f"""<div class="binance-card"><div style="color:#848e9c;font-size:12px;">BIẾN ĐỘNG</div><div style="font-size:24px;font-weight:bold;" class="{color_class}">{change_pct:+.2f}%</div></div>""", unsafe_allow_html=True)
+        with k1:
+            st.markdown(f"""
+            <div class="quantum-card">
+                <div class="metric-label">CURRENT PRICE</div>
+                <div class="metric-value text-blue">${curr['close']:,.4f}</div>
+            </div>""", unsafe_allow_html=True)
         
-        rating_color = "#fcd535"
-        if "BUY" in sigs['rating']: rating_color = "#0ecb81"
-        elif "SELL" in sigs['rating']: rating_color = "#f6465d"
-        
-        with m3: st.markdown(f"""<div class="binance-card"><div style="color:#848e9c;font-size:12px;">AI SIGNAL</div><div style="font-size:24px;font-weight:bold;color:{rating_color}">{sigs['rating']}</div></div>""", unsafe_allow_html=True)
-        with m4: st.markdown(f"""<div class="binance-card"><div style="color:#848e9c;font-size:12px;">SCORE</div><div style="font-size:24px;font-weight:bold;color:#eaecef">{sigs['score']}/5</div></div>""", unsafe_allow_html=True)
-
-        # --- PHẦN MỚI: WHALE RADAR ---
-        st.write("")
-        st.markdown("### 🐋 PHÂN TÍCH DÒNG TIỀN & CÁ MẬP (ORDER BOOK)")
-        
-        if whale_data:
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                buy_pct = whale_data['buy_pct']
-                # Vẽ thanh áp lực mua bán
-                st.markdown(f"""
-                <div style="display:flex; justify-content:space-between; color:#848e9c; font-size:12px; margin-bottom:5px;">
-                    <span>LỰC MUA: {buy_pct:.1f}%</span>
-                    <span>LỰC BÁN: {whale_data['sell_pct']:.1f}%</span>
-                </div>
-                <div class="whale-bar-container">
-                    <div class="whale-bar-fill" style="width: {buy_pct}%;"></div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Nhận xét dòng tiền
-                if buy_pct > 60: st.caption("🔥 Phe Mua đang áp đảo (Cá mập gom hàng)")
-                elif buy_pct < 40: st.caption("🩸 Phe Bán đang xả mạnh")
-                else: st.caption("⚖️ Thị trường cân bằng")
-                
-            with c2:
-                st.markdown(f"""
-                <div class="binance-card" style="padding:10px;">
-                    <small>TƯỜNG LỆNH LỚN</small><br>
-                    {'<br>'.join([w for w in whale_data['walls']]) if whale_data['walls'] else '<span style="color:#888">Không có tường lớn</span>'}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.warning("Không lấy được dữ liệu Sổ lệnh (Order Book).")
-
-        st.write("")
-        render_tradingview_widget(symbol)
-    else:
-        st.warning(f"Dữ liệu chưa sẵn sàng cho {symbol}.")
-        render_tradingview_widget(symbol)
-
-elif app_mode == "📡 SMART SCANNER AI":
-    st.markdown("### 📡 MÁY QUÉT CƠ HỘI ĐẦU TƯ")
-    
-    if st.button("🚀 BẮT ĐẦU QUÉT", type="primary"):
-        scan_coins = get_market_symbols(30)
-        results = []
-        bar = st.progress(0)
-        
-        for i, sym in enumerate(scan_coins):
-            bar.progress((i+1)/len(scan_coins))
+        with k2:
+            color = "text-green" if change >= 0 else "text-red"
+            sign = "+" if change >= 0 else ""
+            st.markdown(f"""
+            <div class="quantum-card">
+                <div class="metric-label">24H CHANGE</div>
+                <div class="metric-value {color}">{sign}{change:.2f}%</div>
+            </div>""", unsafe_allow_html=True)
             
-            df = fetch_candle_data_backend(sym, '4h', 100)
-            if not df.empty:
-                try:
-                    _, sigs = analyze_pro_signals(df)
-                    # Thêm phân tích dòng tiền vào Scanner luôn
-                    w_data = analyze_order_book(sym)
-                    buy_pressure = w_data['buy_pct'] if w_data else 50
-                    
-                    if sigs['rating'] != "NEUTRAL":
-                        results.append({
-                            "COIN": sym,
-                            "GIÁ": df.iloc[-1]['close'],
-                            "RATING": sigs['rating'],
-                            "LỰC MUA (%)": f"{buy_pressure:.1f}%",
-                            "SCORE": sigs['score']
-                        })
-                except: continue
-        
-        bar.empty()
-        
-        if results:
-            st.success(f"Tìm thấy {len(results)} cơ hội!")
-            res_df = pd.DataFrame(results).sort_values(by="SCORE", ascending=False)
+        with k3:
+            vol_fmt = f"${curr['volume']*curr['close']/1000000:.2f}M"
+            st.markdown(f"""
+            <div class="quantum-card">
+                <div class="metric-label">VOLUME (EST)</div>
+                <div class="metric-value">{vol_fmt}</div>
+            </div>""", unsafe_allow_html=True)
             
-            def style_table(val):
-                if 'STRONG BUY' in str(val): return 'color: #0ecb81; font-weight: bold'
-                if 'STRONG SELL' in str(val): return 'color: #f6465d; font-weight: bold'
-                return ''
+        with k4:
+            rsi = curr['RSI_14']
+            rsi_col = "text-green" if rsi < 30 else ("text-red" if rsi > 70 else "text-blue")
+            st.markdown(f"""
+            <div class="quantum-card">
+                <div class="metric-label">RSI STRENGTH</div>
+                <div class="metric-value {rsi_col}">{rsi:.1f}</div>
+            </div>""", unsafe_allow_html=True)
 
-            st.dataframe(res_df.style.map(style_table, subset=['RATING']), use_container_width=True)
-        else:
-            st.info("Chưa có tín hiệu mạnh.")
+        # 3. Charts Area (Split view)
+        c_chart1, c_chart2 = st.columns([2, 1])
+        
+        with c_chart1:
+            st.markdown("### 📈 QUANTUM CHART (PYTHON CORE)")
+            fig = create_quantum_chart(df, symbol)
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with c_chart2:
+            st.markdown("### 🌏 GLOBAL FEED (TRADINGVIEW)")
+            render_tv_widget(symbol)
 
+    else:
+        st.error(f"DATA STREAM INTERRUPTED FOR {symbol}. PLEASE CHECK CONNECTION.")
+
+# ================= TAB 2: AI BRAIN (ADVANCED ANALYSIS) =================
+with tab2:
+    if not df.empty:
+        col_ai_1, col_ai_2 = st.columns([1, 2])
+        
+        with col_ai_1:
+            st.markdown("### 🤖 SIGNAL SYNTHESIS")
+            rating = analysis['rating']
+            r_color = "#444"
+            if "BUY" in rating: r_color = "#00ff41"
+            elif "SELL" in rating: r_color = "#ff0055"
+            
+            st.markdown(f"""
+            <div class="quantum-card" style="text-align:center; border: 2px solid {r_color};">
+                <div style="font-size:16px; color:#888;">AI VERDICT</div>
+                <div style="font-size:48px; font-weight:bold; color:{r_color};">{rating}</div>
+                <div style="font-size:20px; color:white;">CONFIDENCE: {abs(analysis['score'])}/5</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.write("#### 🔎 LOGIC BREAKDOWN")
+            for r in analysis['reasons']:
+                icon = "✅" if "Bullish" in r or "Dip" in r or "Oversold" in r else "🔻"
+                st.markdown(f"""<div style="padding:10px; background:#1a1a1a; margin-bottom:5px; border-radius:4px;">{icon} {r}</div>""", unsafe_allow_html=True)
+
+        with col_ai_2:
+            st.markdown("### 📊 TECHNICAL MATRIX")
+            tech_df = pd.DataFrame({
+                "Indicator": ["EMA 50", "EMA 200", "RSI (14)", "MACD", "ATR", "ADX"],
+                "Value": [
+                    f"{curr['EMA_50']:.4f}", 
+                    f"{curr['EMA_200']:.4f}", 
+                    f"{curr['RSI_14']:.1f}", 
+                    f"{curr['MACD_12_26_9']:.4f}",
+                    f"{curr['ATRr_14']:.4f}",
+                    f"{curr['ADX_14']:.1f}"
+                ],
+                "Signal": [
+                    "BULL" if curr['close'] > curr['EMA_50'] else "BEAR",
+                    "BULL" if curr['close'] > curr['EMA_200'] else "BEAR",
+                    "NEUTRAL",
+                    "BULL" if curr['MACDh_12_26_9'] > 0 else "BEAR",
+                    "HIGH VOLATILITY" if curr['ATRr_14'] > prev['ATRr_14'] else "LOW",
+                    "STRONG TREND" if curr['ADX_14'] > 25 else "WEAK"
+                ]
+            })
+            
+            def style_matrix(val):
+                if val == "BULL": return "color: #00ff41; font-weight:bold"
+                if val == "BEAR": return "color: #ff0055; font-weight:bold"
+                return "color: #aaa"
+
+            st.dataframe(tech_df.style.map(style_matrix, subset=['Signal']), use_container_width=True, height=300)
+
+# ================= TAB 3: WHALE RADAR (ORDER BOOK) =================
+with tab3:
+    st.markdown("### 🐋 DEEP SEA SONAR (DEPTH & WALLS)")
+    
+    with st.spinner("Scanning Order Book..."):
+        ob = engine.fetch_order_book(symbol)
+    
+    if ob:
+        w1, w2 = st.columns([3, 1])
+        with w1:
+            depth_fig = create_depth_chart(ob)
+            st.plotly_chart(depth_fig, use_container_width=True)
+        
+        with w2:
+            # Calculate Wall Pressure
+            bids_vol = sum([x[1] for x in ob['bids']])
+            asks_vol = sum([x[1] for x in ob['asks']])
+            total = bids_vol + asks_vol
+            buy_pct = (bids_vol / total) * 100
+            
+            st.markdown("#### ⚖️ PRESSURE GAUGE")
+            st.markdown(f"""
+            <div style="background:#333; height:30px; border-radius:15px; overflow:hidden; display:flex;">
+                <div style="width:{buy_pct}%; background:#00ff41; display:flex; align-items:center; justify-content:center; color:black; font-weight:bold;">{buy_pct:.0f}% BUY</div>
+                <div style="width:{100-buy_pct}%; background:#ff0055; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">{100-buy_pct:.0f}% SELL</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.write("")
+            st.markdown("#### 🧱 WALL DETECTED")
+            top_bid = ob['bids'][0]
+            top_ask = ob['asks'][0]
+            st.info(f"🟢 Support: {top_bid[1]:.2f} @ {top_bid[0]}")
+            st.error(f"🔴 Resistance: {top_ask[1]:.2f} @ {top_ask[0]}")
+    else:
+        st.warning("Depth Data Unavailable for this pair.")
+
+# ================= TAB 4: NEWS & SIMULATION =================
+with tab4:
+    col_news, col_sim = st.columns(2)
+    
+    with col_news:
+        st.markdown("### 📰 QUANTUM NEWS FEED (SIMULATED)")
+        # Mock data (Vì News API xịn phải trả tiền)
+        news_data = [
+            {"time": "2 mins ago", "title": f"Huge {symbol.split('/')[0]} transaction detected: 5,000 BTC moved to unknown wallet.", "sentiment": "Neutral"},
+            {"time": "15 mins ago", "title": "SEC Chairman comments on crypto regulations.", "sentiment": "Bearish"},
+            {"time": "1 hour ago", "title": "Tech stocks rally, pulling crypto market up.", "sentiment": "Bullish"},
+            {"time": "2 hours ago", "title": f"{symbol.split('/')[0]} breaks key resistance level at ${curr['close']*0.98:.2f}", "sentiment": "Bullish"},
+        ]
+        
+        for n in news_data:
+            color = "#00ff41" if n['sentiment'] == "Bullish" else ("#ff0055" if n['sentiment'] == "Bearish" else "#00f2ff")
+            st.markdown(f"""
+            <div style="border-left: 3px solid {color}; padding-left: 10px; margin-bottom: 15px; background: #111; padding: 10px; border-radius: 0 4px 4px 0;">
+                <div style="font-size:12px; color:#666;">{n['time']} • <span style="color:{color}">{n['sentiment']}</span></div>
+                <div style="font-size:15px; color:#e0e0e0;">{n['title']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col_sim:
+        st.markdown("### 🎲 TRADE SIMULATOR (PAPER)")
+        st.caption("Test your strategy risk-free")
+        
+        amount = st.number_input("Amount (USD)", value=1000)
+        leverage = st.slider("Leverage", 1, 20, 5)
+        
+        col_btn1, col_btn2 = st.columns(2)
+        if col_btn1.button("OPEN LONG 🚀", type="primary", use_container_width=True):
+            st.success(f"Position OPENED: LONG {symbol} x{leverage}. Entry: {curr['close']}")
+            st.balloons()
+            
+        if col_btn2.button("OPEN SHORT 📉", type="primary", use_container_width=True):
+            st.error(f"Position OPENED: SHORT {symbol} x{leverage}. Entry: {curr['close']}")
+
+# --- FOOTER ---
 st.markdown("---")
-st.caption("Crypto Hedge Fund Terminal | Whale Edition")
+st.markdown("""
+<div style="text-align: center; color: #444; font-size: 12px;">
+    THANGLONG QUANTUM TERMINAL | SYSTEM ID: TQT-9000-ALPHA <br>
+    POWERED BY PYTHON • STREAMLIT • PLOTLY • PANDAS_TA
+</div>
+""", unsafe_allow_html=True)
