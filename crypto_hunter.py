@@ -2,11 +2,8 @@ import streamlit as st
 import pandas as pd
 import pandas_ta as ta
 import ccxt
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import streamlit.components.v1 as components
 import time
-from datetime import datetime
-import numpy as np
 
 # ==============================================================================
 # 1. ORACLE UI CONFIGURATION
@@ -29,7 +26,7 @@ st.markdown("""
     }
 
     /* GLOBAL RESET */
-    .stApp { background-color: var(--bg-color); color: var(--text); font-family: 'Rajdhani', sans-serif; }
+    .stApp { background-color: var(--bg-color) !important; color: var(--text) !important; font-family: 'Rajdhani', sans-serif !important; }
     
     /* ORACLE HEADER */
     .oracle-header {
@@ -65,10 +62,16 @@ st.markdown("""
     .badge-long { background: rgba(0, 255, 163, 0.1); border: 1px solid var(--bull); color: var(--bull); }
     .badge-short { background: rgba(255, 0, 85, 0.1); border: 1px solid var(--bear); color: var(--bear); }
 
-    /* INPUTS */
+    /* INPUTS FIX (FIX LỖI MÀU TRẮNG KHÓ NHÌN) */
     div[data-baseweb="input"] { background-color: #1a1a1a !important; border: 1px solid #333 !important; }
-    input { color: var(--accent) !important; font-family: 'Orbitron' !important; }
+    input[type="text"] { color: var(--accent) !important; background-color: transparent !important; font-family: 'Orbitron', sans-serif !important; }
+    div[data-baseweb="select"] > div { background-color: #1a1a1a !important; color: #fff !important; border-color: #333 !important; }
     
+    /* DROPDOWN MENU */
+    ul[data-baseweb="menu"] { background-color: #111 !important; border: 1px solid #333 !important; }
+    li[data-baseweb="option"] { color: #eee !important; }
+    li[data-baseweb="option"]:hover { background-color: #222 !important; color: var(--accent) !important; }
+
     /* TABLES */
     div[data-testid="stDataFrame"] { border: 1px solid #333; }
     
@@ -94,9 +97,16 @@ class OracleEngine:
             return sorted(syms, key=lambda x: tickers[x]['quoteVolume'], reverse=True)[:30]
         except: return ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT']
 
-    def fetch_ohlcv(self, symbol, timeframe, limit=100):
+    def fetch_ohlcv(self, symbol, timeframe, limit=300): # Tăng limit lên 300 để đủ tính EMA200
         try:
-            bars = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            # Retry logic
+            for _ in range(3):
+                try:
+                    bars = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+                    if bars: break
+                except: time.sleep(0.5)
+            else: return pd.DataFrame()
+
             df = pd.DataFrame(bars, columns=['t', 'o', 'h', 'l', 'c', 'v'])
             df['t'] = pd.to_datetime(df['t'], unit='ms')
             df.set_index('t', inplace=True)
@@ -106,65 +116,61 @@ class OracleEngine:
     # --- TÍNH NĂNG 1: PRICE ACTION HUNTER (SOI NẾN) ---
     def detect_patterns(self, df):
         if df.empty: return []
-        
-        # Sử dụng pandas_ta để tìm mô hình nến
         patterns = []
-        
-        # 1. Doji (Lưỡng lự)
-        if ta.cdl_doji(df['o'], df['h'], df['l'], df['c']).iloc[-1] != 0:
-            patterns.append("🕯️ DOJI (Lưỡng lự)")
-            
-        # 2. Engulfing (Nhấn chìm - Đảo chiều mạnh)
-        engulf = ta.cdl_engulfing(df['o'], df['h'], df['l'], df['c']).iloc[-1]
-        if engulf > 0: patterns.append("🔥 BULLISH ENGULFING (Nhấn chìm Tăng)")
-        elif engulf < 0: patterns.append("🩸 BEARISH ENGULFING (Nhấn chìm Giảm)")
-        
-        # 3. Hammer / Shooting Star (Búa / Sao đổi ngôi)
-        # Tự code logic đơn giản cho Búa
-        body = abs(df['c'] - df['o'])
-        wick_lower = df[['o', 'c']].min(axis=1) - df['l']
-        wick_upper = df['h'] - df[['o', 'c']].max(axis=1)
-        
-        curr = df.iloc[-1]
-        body_size = body.iloc[-1]
-        lower_wick = wick_lower.iloc[-1]
-        upper_wick = wick_upper.iloc[-1]
-        
-        if lower_wick > body_size * 2 and upper_wick < body_size:
-            patterns.append("🔨 HAMMER (Đảo chiều Tăng tại đáy)")
-        elif upper_wick > body_size * 2 and lower_wick < body_size:
-            patterns.append("☄️ SHOOTING STAR (Đảo chiều Giảm tại đỉnh)")
-            
+        try:
+            # 1. Doji
+            if ta.cdl_doji(df['o'], df['h'], df['l'], df['c']).iloc[-1] != 0:
+                patterns.append("🕯️ DOJI (Lưỡng lự)")
+            # 2. Engulfing
+            engulf = ta.cdl_engulfing(df['o'], df['h'], df['l'], df['c']).iloc[-1]
+            if engulf > 0: patterns.append("🔥 BULLISH ENGULFING")
+            elif engulf < 0: patterns.append("🩸 BEARISH ENGULFING")
+            # 3. Hammer Logic
+            body = abs(df['c'] - df['o'])
+            wick_lower = df[['o', 'c']].min(axis=1) - df['l']
+            wick_upper = df['h'] - df[['o', 'c']].max(axis=1)
+            curr = df.iloc[-1]
+            if wick_lower.iloc[-1] > body.iloc[-1] * 2 and wick_upper.iloc[-1] < body.iloc[-1]:
+                patterns.append("🔨 HAMMER")
+        except: pass
         return patterns
 
-    # --- TÍNH NĂNG 2: MULTI-TIMEFRAME CONFLUENCE (ĐỒNG PHA) ---
+    # --- TÍNH NĂNG 2: MULTI-TIMEFRAME CONFLUENCE (FIXED CRASH) ---
     def analyze_confluence(self, symbol):
         timeframes = ['15m', '1h', '4h']
         scores = {}
         data_frames = {}
         
         for tf in timeframes:
-            df = self.fetch_ohlcv(symbol, tf, 50)
-            if df.empty: continue
+            # Tải 300 nến để đủ dữ liệu cho EMA200
+            df = self.fetch_ohlcv(symbol, tf, 300)
             
-            # Tính EMA & RSI
-            ema50 = ta.ema(df['c'], length=50).iloc[-1]
-            ema200 = ta.ema(df['c'], length=200).iloc[-1]
-            rsi = ta.rsi(df['c'], length=14).iloc[-1]
-            price = df['c'].iloc[-1]
+            # KIỂM TRA DỮ LIỆU AN TOÀN
+            if df.empty or len(df) < 200: 
+                scores[tf] = {"status": "NO DATA", "rsi": 50, "price": 0}
+                continue
             
-            # Chấm điểm từng khung
-            score = 0
-            if price > ema50: score += 1
-            if price > ema200: score += 1
-            if rsi > 50: score += 1
-            
-            status = "NEUTRAL"
-            if score >= 3: status = "BULLISH"
-            elif score <= 0: status = "BEARISH"
-            
-            scores[tf] = {"status": status, "rsi": rsi, "price": price}
-            data_frames[tf] = df
+            try:
+                # Tính EMA & RSI
+                ema50 = ta.ema(df['c'], length=50).iloc[-1]
+                ema200 = ta.ema(df['c'], length=200).iloc[-1]
+                rsi = ta.rsi(df['c'], length=14).iloc[-1]
+                price = df['c'].iloc[-1]
+                
+                # Chấm điểm
+                score = 0
+                if price > ema50: score += 1
+                if price > ema200: score += 1
+                if rsi > 50: score += 1
+                
+                status = "NEUTRAL"
+                if score >= 3: status = "BULLISH"
+                elif score <= 0: status = "BEARISH"
+                
+                scores[tf] = {"status": status, "rsi": rsi, "price": price}
+                data_frames[tf] = df
+            except Exception as e:
+                scores[tf] = {"status": "ERROR", "rsi": 50, "price": 0}
             
         return scores, data_frames
 
@@ -177,9 +183,9 @@ engine = OracleEngine()
 # Header & Search
 c1, c2 = st.columns([1, 5])
 with c1: st.markdown("## 🔮")
-with c2: st.markdown('<div class="oracle-header">THE MARKET ORACLE v9</div>', unsafe_allow_html=True)
+with c2: st.markdown('<div class="oracle-header">THE MARKET ORACLE v9.1</div>', unsafe_allow_html=True)
 
-# Search Bar (Spy Style)
+# Search Bar
 col_search, col_list = st.columns([1, 2])
 with col_search:
     manual = st.text_input("ORACLE INPUT", placeholder="Type Symbol (e.g. SUI)...", label_visibility="collapsed")
@@ -193,12 +199,12 @@ if "/USDT" not in symbol and "/USD" not in symbol: symbol += "/USDT"
 # --- MAIN ANALYSIS ---
 st.write("---")
 
-# 1. ORACLE PROCESSING ANIMATION
-with st.spinner(f"🔮 ORACLE is reading the stars for {symbol}..."):
+# 1. ORACLE PROCESSING
+with st.spinner(f"🔮 ORACLE is analyzing {symbol}..."):
     confluence, dfs = engine.analyze_confluence(symbol)
     
     # Check data availability
-    if '4h' in dfs:
+    if '4h' in dfs and not dfs['4h'].empty:
         df_4h = dfs['4h']
         curr_price = df_4h['c'].iloc[-1]
         patterns = engine.detect_patterns(df_4h)
@@ -206,7 +212,6 @@ with st.spinner(f"🔮 ORACLE is reading the stars for {symbol}..."):
         # --- TOP METRICS ROW ---
         m1, m2, m3, m4 = st.columns(4)
         
-        # Logic tổng hợp (The Oracle Brain)
         bull_count = sum([1 for tf in confluence if confluence[tf]['status'] == "BULLISH"])
         bear_count = sum([1 for tf in confluence if confluence[tf]['status'] == "BEARISH"])
         
@@ -218,45 +223,27 @@ with st.spinner(f"🔮 ORACLE is reading the stars for {symbol}..."):
         elif bear_count == 2: sentiment = "SELL 🔴"; s_color = "var(--bear)"
 
         with m1:
-            st.markdown(f"""
-            <div class="glass-card">
-                <div class="metric-label">CURRENT PRICE</div>
-                <div class="metric-val" style="color:var(--accent)">${curr_price:,.4f}</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="glass-card"><div class="metric-label">CURRENT PRICE</div><div class="metric-val" style="color:var(--accent)">${curr_price:,.4f}</div></div>""", unsafe_allow_html=True)
             
         with m2:
-            st.markdown(f"""
-            <div class="glass-card" style="border-color:{s_color}">
-                <div class="metric-label">ORACLE VERDICT</div>
-                <div class="metric-val" style="color:{s_color}">{sentiment}</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="glass-card" style="border-color:{s_color}"><div class="metric-label">ORACLE VERDICT</div><div class="metric-val" style="color:{s_color}">{sentiment}</div></div>""", unsafe_allow_html=True)
             
         with m3:
             rsi_4h = confluence['4h']['rsi']
             r_col = "color-bull" if rsi_4h < 30 else ("color-bear" if rsi_4h > 70 else "color:white")
-            st.markdown(f"""
-            <div class="glass-card">
-                <div class="metric-label">RSI (4H) STATUS</div>
-                <div class="metric-val" style="{r_col}">{rsi_4h:.1f}</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="glass-card"><div class="metric-label">RSI (4H) STATUS</div><div class="metric-val" style="{r_col}">{rsi_4h:.1f}</div></div>""", unsafe_allow_html=True)
 
         with m4:
-            # Pattern display
             pat_text = patterns[0] if patterns else "None"
             p_col = "var(--bull)" if "BULL" in pat_text or "HAMMER" in pat_text else ("var(--bear)" if "BEAR" in pat_text else "white")
-            st.markdown(f"""
-            <div class="glass-card">
-                <div class="metric-label">PRICE ACTION PATTERN</div>
-                <div style="font-size:16px; font-weight:bold; color:{p_col}; margin-top:5px;">{pat_text}</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="glass-card"><div class="metric-label">PRICE ACTION PATTERN</div><div style="font-size:16px; font-weight:bold; color:{p_col}; margin-top:5px;">{pat_text}</div></div>""", unsafe_allow_html=True)
 
-        # --- BODY: MULTI-TIMEFRAME & STRATEGY ---
+        # --- BODY: CHART & MATRIX ---
         c_left, c_right = st.columns([2, 1])
         
         with c_left:
-            # Chart TradingView
             base = symbol.split('/')[0]
-            st.markdown(f"### 📉 {base} PRICE ACTION")
+            st.markdown(f"### 📉 {base} CHART")
             components.html(f"""
             <div class="tradingview-widget-container" style="height:500px;width:100%">
               <div id="tv_chart"></div>
@@ -275,28 +262,23 @@ with st.spinner(f"🔮 ORACLE is reading the stars for {symbol}..."):
         with c_right:
             st.markdown("### 🧬 CONFLUENCE MATRIX")
             
-            # 1. Bảng đồng pha
             for tf in ['15m', '1h', '4h']:
                 data = confluence.get(tf, {})
                 status = data.get('status', 'N/A')
                 icon = "🟢" if status == "BULLISH" else ("🔴" if status == "BEARISH" else "⚪")
-                
                 st.markdown(f"""
                 <div class="glass-card" style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-family:'Orbitron'; font-weight:bold;">TIMEFRAME {tf}</span>
-                    <span class="badge" style="background:{'#004400' if status=='BULLISH' else '#440000'}; color:{'#00ff41' if status=='BULLISH' else '#ff0055'}">
+                    <span class="badge" style="background:{'#004400' if status=='BULLISH' else ('#440000' if status=='BEARISH' else '#222')}; color:{'#00ff41' if status=='BULLISH' else ('#ff0055' if status=='BEARISH' else '#888')}">
                         {icon} {status}
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # 2. Oracle Strategy Report (Tính năng mới!)
-            st.markdown("### 📜 ORACLE STRATEGY REPORT")
-            
-            # Logic tạo báo cáo tự động
+            # Oracle Report
+            st.markdown("### 📜 STRATEGY REPORT")
             trend = "TĂNG" if confluence['4h']['status'] == "BULLISH" else "GIẢM"
             action = "LONG/MUA" if trend == "TĂNG" else "SHORT/BÁN"
-            
             atr = ta.atr(df_4h['h'], df_4h['l'], df_4h['c'], length=14).iloc[-1]
             stoploss = curr_price - (atr * 2) if trend == "TĂNG" else curr_price + (atr * 2)
             take_profit = curr_price + (atr * 4) if trend == "TĂNG" else curr_price - (atr * 4)
@@ -304,22 +286,22 @@ with st.spinner(f"🔮 ORACLE is reading the stars for {symbol}..."):
             report_html = f"""
             <div style="background:#1a1a1a; padding:15px; border-radius:8px; font-family:'Courier New'; font-size:14px; color:#ddd; border-left: 3px solid var(--accent);">
                 <strong>>_ ORACLE AI GENERATED:</strong><br><br>
-                1. <strong>XU HƯỚNG CHỦ ĐẠO:</strong> {trend} trên khung H4.<br>
-                2. <strong>HÀNH ĐỘNG GIÁ:</strong> {patterns[0] if patterns else "Chưa có mô hình nến đặc biệt."}<br>
-                3. <strong>CHIẾN LƯỢC ĐỀ XUẤT:</strong> Canh {action} khi giá hồi về EMA 50.<br>
+                1. <strong>XU HƯỚNG CHỦ ĐẠO:</strong> {trend} (Khung H4).<br>
+                2. <strong>TÍN HIỆU ĐỒNG PHA:</strong> {bull_count}/3 Khung Tăng.<br>
+                3. <strong>HÀNH ĐỘNG GIÁ:</strong> {patterns[0] if patterns else "Chưa có"}.<br>
                 -----------------------------<br>
-                🎯 <strong>ENTRY ZONE:</strong> {curr_price:.4f}<br>
-                🛡️ <strong>STOP LOSS (Gợi ý):</strong> {stoploss:.4f} (2x ATR)<br>
-                💰 <strong>TAKE PROFIT:</strong> {take_profit:.4f} (RR 1:2)<br>
+                🎯 <strong>ENTRY:</strong> {curr_price:.4f}<br>
+                🛡️ <strong>STOP LOSS:</strong> {stoploss:.4f}<br>
+                💰 <strong>TAKE PROFIT:</strong> {take_profit:.4f}<br>
             </div>
             """
             st.markdown(report_html, unsafe_allow_html=True)
 
     else:
-        st.error(f"Không thể kết nối tới Oracle Server cho mã {symbol}. Vui lòng thử mã khác.")
+        st.error(f"⚠️ Dữ liệu cho {symbol} không đủ để phân tích (Cần ít nhất 200 nến). Vui lòng thử mã khác.")
 
 # --- FOOTER ---
 st.markdown("---")
 col_f1, col_f2 = st.columns([4, 1])
-with col_f1: st.caption("THE ORACLE TERMINAL v9.0 | Powered by Pandas_TA & Plotly")
+with col_f1: st.caption("THE ORACLE TERMINAL v9.1 (Stable) | Powered by Pandas_TA & Plotly")
 with col_f2: st.caption("Latency: 12ms 🟢")
