@@ -1,2 +1,0 @@
-# thanglongcryto
-cryto
