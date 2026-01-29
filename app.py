@@ -4,26 +4,14 @@ import time
 # IMPORT MODULES
 from frontend.styles import get_cyberpunk_css
 from frontend.charts import render_chart
-from backend.data_loader import fetch_data
+from backend.data_loader import fetch_data, fetch_global_indices, fetch_market_overview
 from backend.logic import analyze_market
 
-# 1. CẤU HÌNH
-st.set_page_config(layout="wide", page_title="CYBERPUNK v18", page_icon="🔮", initial_sidebar_state="collapsed")
+# 1. CẤU HÌNH TRANG (BẮT BUỘC PHẢI Ở DÒNG ĐẦU TIÊN CỦA STREAMLIT)
+st.set_page_config(layout="wide", page_title="CYBERPUNK V21", page_icon="🔮", initial_sidebar_state="collapsed")
 st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
-# 2. HEADER
-c_head, c_status = st.columns([3, 1])
-with c_head:
-    st.markdown('<div class="glitch-header">CYBER ORACLE <span style="font-size:20px; color:var(--neon-green)">v18 PRO</span></div>', unsafe_allow_html=True)
-with c_status:
-    st.markdown('<div style="text-align:right; font-family:Share Tech Mono; color:#00ff9f; padding-top:15px;">SYSTEM: ONLINE_ <span class="blinking-cursor"></span></div>', unsafe_allow_html=True)
-# ... (Phần Import giữ nguyên) ...
-# NHỚ THÊM import fetch_market_overview VÀO DÒNG NÀY NHÉ:
-from backend.data_loader import fetch_data, fetch_global_indices, fetch_market_overview
-
-# ... (Phần set_page_config và CSS giữ nguyên) ...
-
-# 2. HEADER
+# 2. HEADER (CHỈ GIỮ LẠI 1 CÁI NÀY THÔI)
 c_head, c_status = st.columns([3, 1])
 with c_head:
     st.markdown('<div class="glitch-header">CYBER ORACLE <span style="font-size:20px; color:var(--neon-green)">v21</span></div>', unsafe_allow_html=True)
@@ -50,112 +38,82 @@ if macro_data:
     with g3: st.markdown(macro_card("S&P 500", macro_data['S&P500']), unsafe_allow_html=True)
     with g4: st.markdown(macro_card("USD/VND", macro_data['USD/VND']), unsafe_allow_html=True)
 
-# --- PHẦN 2: BẢNG ĐIỆN TỬ TỔNG HỢP (TÍNH NĂNG MỚI) ---
-# Tạo một Expandable (có thể thu gọn) để không chiếm chỗ nếu không cần
+# --- PHẦN 2: BẢNG ĐIỆN TỬ TỔNG HỢP ---
 with st.expander("📊 LIVE MARKET OVERVIEW (TOP COINS)", expanded=True):
     df_overview = fetch_market_overview()
     
     if df_overview is not None:
-        # Dùng tính năng Dataframe Column Config của Streamlit để tô màu xanh/đỏ
         st.dataframe(
             df_overview,
             use_container_width=True,
             hide_index=True,
             column_config={
                 "SYMBOL": st.column_config.TextColumn("Asset", help="Tên tài sản"),
-                "PRICE ($)": st.column_config.NumberColumn("Price", format="$%.4f"), # Định dạng tiền tệ
-                "24H %": st.column_config.NumberColumn(
-                    "24h Change",
-                    format="%.2f%%",
-                    help="Biến động trong 24h qua"
-                ),
+                "PRICE ($)": st.column_config.NumberColumn("Price", format="$%.4f"),
+                "24H %": st.column_config.NumberColumn("24h Change", format="%.2f%%"),
                 "TREND": st.column_config.TextColumn("Trend")
             }
         )
     else:
         st.warning("⚠️ Market data syncing... Please wait.")
 
-# --- PHẦN 3: INPUT VÀ PHÂN TÍCH CHI TIẾT (GIỮ NGUYÊN CODE CŨ TỪ ĐÂY TRỞ XUỐNG) ---
-col_search, col_pad = st.columns([1, 2])
-# ... (Tiếp tục code cũ) ...
-
-# 3. INPUT BAR (NÂNG CẤP V20)
+# --- PHẦN 3: INPUT VÀ LOGIC CHÍNH ---
 col_search, col_pad = st.columns([1, 2])
 with col_search:
-    # DANH SÁCH TÀI SẢN KHỔNG LỒ
+    # DANH SÁCH TÀI SẢN
     ASSETS = {
         "🔥 POPULAR": ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "LINK"],
-        "💰 COMMODITIES & FX": ["GC=F", "CL=F", "EURUSD=X", "^GSPC"], # Vàng, Dầu, Euro, S&P500
+        "💰 COMMODITIES & FX": ["GC=F", "CL=F", "EURUSD=X", "^GSPC"], 
         "🚀 MEME & ALTS": ["PEPE", "SHIB", "BONK", "WIF", "FLOKI", "SUI", "APT", "ARB", "OP", "TIA", "SEI", "INJ", "RNDR", "FET", "NEAR", "AVAX", "DOT", "MATIC", "LTC", "BCH", "UNI", "FIL", "ATOM", "IMX", "VET", "GRT", "STX", "THETA", "RUNE", "AAVE", "ALGO", "EGLD", "SAND", "AXS", "MANA", "EOS", "XTZ", "NEO", "MKR", "SNX", "KCS", "LDO", "QNT", "FLOW", "GALA", "CHZ", "CRV", "MINA", "FXS", "KLAY", "HBAR", "FTM", "EOS", "IOTA", "XLM"]
     }
     
-    # Gộp lại thành 1 list phẳng để tìm kiếm
     flat_list = []
     for category, items in ASSETS.items():
         flat_list.extend(items)
-    
-    # Thêm tùy chọn nhập tay nếu muốn
     flat_list.append("...TYPE CUSTOM...")
 
-    # Widget chọn (Có thể gõ phím để tìm)
-    selected_asset = st.selectbox(
-        "SELECT ASSET", 
-        flat_list, 
-        index=0, 
-        label_visibility="collapsed"
-    )
+    selected_asset = st.selectbox("SELECT ASSET", flat_list, index=0, label_visibility="collapsed")
 
-    # Logic xử lý
     if selected_asset == "...TYPE CUSTOM...":
         manual_input = st.text_input("ENTER CUSTOM SYMBOL", "BTC")
         symbol = manual_input.upper()
     else:
-        # Nếu chọn Vàng (GC=F) thì giữ nguyên, còn lại là Coin
         symbol = selected_asset
 
-# ... (Tiếp tục phần MAIN INTERFACE bên dưới như cũ) ...
-
-# 4. DASHBOARD
+# MAIN INTERFACE
 st.write("---")
 main_container = st.container()
 
 with main_container:
-    with st.spinner(f"⚡ SCANNING MARKET DATA FOR {symbol}..."):
+    with st.spinner(f"⚡ SCANNING DATA FOR {symbol}..."):
         df, status_msg = fetch_data(symbol)
         
         if df is not None:
             data = analyze_market(df)
             
             if data:
-                # --- HÀNG 1: METRICS CHÍNH ---
+                # HÀNG 1: METRICS
                 m1, m2, m3, m4 = st.columns(4)
                 
                 with m1: st.markdown(f"""<div class="glass-card"><div class="metric-label">PRICE</div><div class="metric-value" style="color:var(--neon-cyan)">${data['price']:,.2f}</div></div>""", unsafe_allow_html=True)
                 
-                with m2: 
-                    st.markdown(f"""<div class="glass-card" style="border:1px solid {data['color']}"><div class="metric-label" style="color:{data['color']}">AI VERDICT</div><div class="metric-value" style="color:{data['color']}; font-size:20px">{data['signal']}</div></div>""", unsafe_allow_html=True)
+                with m2: st.markdown(f"""<div class="glass-card" style="border:1px solid {data['color']}"><div class="metric-label" style="color:{data['color']}">AI VERDICT</div><div class="metric-value" style="color:{data['color']}; font-size:20px">{data['signal']}</div></div>""", unsafe_allow_html=True)
                 
                 with m3:
-                    # HIỂN THỊ POC (MỚI)
-                    st.markdown(f"""
-                    <div class="glass-card">
-                        <div class="metric-label">POINT OF CONTROL (POC)</div>
-                        <div class="metric-value" style="color:#ff0055">${data['poc']:,.2f}</div>
-                        <div style="font-size:12px; color:#888">{data['poc_stat']}</div>
-                    </div>""", unsafe_allow_html=True)
+                    # POC Metric
+                    st.markdown(f"""<div class="glass-card"><div class="metric-label">POINT OF CONTROL</div><div class="metric-value" style="color:#ff0055">${data['poc']:,.2f}</div><div style="font-size:12px; color:#888">{data['poc_stat']}</div></div>""", unsafe_allow_html=True)
                     
                 with m4:
                     rsi_col = "var(--neon-green)" if data['rsi'] < 30 else ("var(--neon-pink)" if data['rsi'] > 70 else "#fff")
                     st.markdown(f"""<div class="glass-card"><div class="metric-label">RSI</div><div class="metric-value" style="color:{rsi_col}">{data['rsi']:.1f}</div></div>""", unsafe_allow_html=True)
 
-                # --- HÀNG 2: BIỂU ĐỒ & CHI TIẾT KỸ THUẬT ---
+                # HÀNG 2: CHART & INFO
                 c_chart, c_info = st.columns([3, 1])
                 
                 with c_chart:
                     render_chart(symbol)
                 
                 with c_info:
-                    # BẢNG KỸ THUẬT (MỚI)
                     st.markdown(f"""
                     <div class="glass-card">
                         <div class="metric-label">OSCILLATORS</div>
@@ -177,7 +135,6 @@ with main_container:
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # LOG CHIẾN LƯỢC
                     st.markdown(f"""
                     <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
                         <div class="metric-label">>_ BATTLE PLAN</div>
@@ -194,4 +151,4 @@ with main_container:
 
         else:
             st.error(f"❌ DATA ERROR: {status_msg}")
-            st.info("System fallback active. Try BTC, ETH, SOL.")
+            st.info("Please select another asset.")
