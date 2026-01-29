@@ -105,3 +105,53 @@ def fetch_global_indices():
     except Exception as e:
         print(f"Global Data Error: {e}")
         return None
+# ... (Giữ nguyên các phần trên) ...
+
+def fetch_market_overview():
+    """
+    GOD'S EYE: Quét nhanh dữ liệu của Top 15 Coins
+    """
+    # Danh sách các Coin chủ chốt
+    top_coins = [
+        "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", 
+        "DOGE-USD", "ADA-USD", "LINK-USD", "AVAX-USD", "SUI-USD",
+        "PEPE-USD", "SHIB-USD", "NEAR-USD", "DOT-USD", "LTC-USD"
+    ]
+    
+    try:
+        # Tải dữ liệu 2 ngày gần nhất của toàn bộ list trên (Batch Download)
+        data = yf.download(top_coins, period="2d", progress=False)
+        
+        # Yahoo trả về MultiIndex, cần xử lý khéo léo
+        closes = data['Close']
+        opens = data['Open'] # Dùng giá mở cửa hôm nay để tính % Change chuẩn trong ngày
+        
+        overview_data = []
+        
+        for symbol in top_coins:
+            try:
+                # Lấy tên ngắn gọn (Bỏ đuôi -USD)
+                short_name = symbol.replace('-USD', '')
+                
+                # Lấy giá hiện tại và giá đóng cửa hôm qua
+                price_now = closes[symbol].iloc[-1]
+                price_prev = closes[symbol].iloc[-2] # Hoặc dùng opens[symbol].iloc[-1] tùy sàn
+                
+                change_pct = (price_now - price_prev) / price_prev * 100
+                
+                # Thêm vào danh sách
+                overview_data.append({
+                    "SYMBOL": short_name,
+                    "PRICE ($)": price_now,
+                    "24H %": change_pct,
+                    "TREND": "🚀" if change_pct >= 5 else ("📈" if change_pct > 0 else ("🩸" if change_pct <= -5 else "📉"))
+                })
+            except: continue
+            
+        # Tạo DataFrame
+        df_overview = pd.DataFrame(overview_data)
+        return df_overview
+        
+    except Exception as e:
+        print(f"Overview Error: {e}")
+        return None
