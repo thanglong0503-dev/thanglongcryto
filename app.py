@@ -11,7 +11,7 @@ from backend.logic import analyze_market
 st.set_page_config(layout="wide", page_title="CYBER COMMANDER V26", page_icon="🔮", initial_sidebar_state="expanded")
 st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
-# 2. POPUP CHART & DATA (ĐÃ THÊM LẠI OSCILLATORS)
+# 2. POPUP CHART & DATA (ĐÃ SỬA LỖI SYNTAX ERROR TẠI ĐÂY)
 @st.dialog("TACTICAL VIEW", width="large")
 def show_popup_data(symbol):
     # Header
@@ -23,35 +23,49 @@ def show_popup_data(symbol):
     if df is not None:
         data = analyze_market(df)
         if data:
-            # Hàng 1: Chỉ số chính (HUD)
+            # --- CHUẨN BỊ SỐ LIỆU TRƯỚC (QUAN TRỌNG ĐỂ KHÔNG BỊ LỖI) ---
+            # Màu sắc
+            rsi_color = 'var(--neon-green)' if data['rsi'] < 30 else ('var(--neon-pink)' if data['rsi'] > 70 else '#fff')
+            stoch_color = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
+            trend_color = 'var(--neon-green)' if data['trend'] == 'UPTREND' else 'var(--neon-pink)'
+            
+            # Format số
+            rsi_val = f"{data['rsi']:.1f}"
+            stoch_val = f"{data['stoch_k']:.1f}"
+            entry_price = f"${data['price']:,.2f}"
+            stop_price = f"${data['s1']*0.99:,.2f}"
+            target_price = f"${data['r1']:,.2f}"
+
+            # --- HÀNG 1: CHỈ SỐ CHÍNH (HUD) ---
             c1, c2, c3 = st.columns(3)
-            with c1: st.markdown(f"""<div class="glass-card"><div class="metric-label">CURRENT PRICE</div><div class="metric-val">${data['price']:,.2f}</div></div>""", unsafe_allow_html=True)
+            with c1: st.markdown(f"""<div class="glass-card"><div class="metric-label">CURRENT PRICE</div><div class="metric-val">{entry_price}</div></div>""", unsafe_allow_html=True)
             with c2: st.markdown(f"""<div class="glass-card" style="border-color:{data['color']}"><div class="metric-label" style="color:{data['color']}">AI SIGNAL</div><div class="metric-val" style="color:{data['color']}">{data['signal']}</div></div>""", unsafe_allow_html=True)
             with c3: st.markdown(f"""<div class="glass-card"><div class="metric-label">POINT OF CONTROL</div><div class="metric-val" style="color:#ff0055">${data['poc']:,.2f}</div></div>""", unsafe_allow_html=True)
             
-            # Hàng 2: Chart & Chiến thuật
+            # --- HÀNG 2: BIỂU ĐỒ & CHIẾN THUẬT ---
             c_chart, c_plan = st.columns([2, 1])
             
             with c_chart:
                 render_chart(symbol, height=500)
                 
             with c_plan:
-                # 1. HỘP OSCILLATORS (ĐÃ KHÔI PHỤC)                 st.markdown(f"""
+                # 1. HỘP OSCILLATORS (ĐÃ FIX LỖI)
+                st.markdown(f"""
                 <div class="glass-card">
                     <div class="metric-label">OSCILLATORS</div>
                     <div style="margin-top:10px; font-family:'Share Tech Mono'; color:#ccc; font-size:14px;">
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                             <span>RSI (14)</span>
-                            <span style="color:{'var(--neon-pink)' if data['rsi']>70 else 'var(--neon-cyan)'}">{data['rsi']:.1f}</span>
+                            <span style="color:{rsi_color}">{rsi_val}</span>
                         </div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                             <span>Stoch K</span>
-                            <span style="color:{'var(--neon-green)' if data['stoch_k']<20 else '#fff'}">{data['stoch_k']:.1f}</span>
+                            <span style="color:{stoch_color}">{stoch_val}</span>
                         </div>
                         <div style="height:1px; background:#333; margin:10px 0;"></div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                             <span>TREND</span>
-                            <span style="color:{'var(--neon-green)' if data['trend']=='UPTREND' else 'var(--neon-pink)'}">{data['trend']}</span>
+                            <span style="color:{trend_color}">{data['trend']}</span>
                         </div>
                     </div>
                 </div>
@@ -64,9 +78,9 @@ def show_popup_data(symbol):
                     
                     <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.6;">
                         <div style="font-size:11px; color:#666">ENTRY SETUP</div>
-                        🚀 <strong>ENTRY:</strong> <span style="color:#fff">${data['price']:,.2f}</span><br>
-                        🛑 <strong>STOP:</strong> <span style="color:#ff0055">${data['s1']*0.99:,.2f}</span><br>
-                        💰 <strong>TARGET:</strong> <span style="color:#00ff9f">${data['r1']:,.2f}</span>
+                        🚀 <strong>ENTRY:</strong> <span style="color:#fff">{entry_price}</span><br>
+                        🛑 <strong>STOP:</strong> <span style="color:#ff0055">{stop_price}</span><br>
+                        💰 <strong>TARGET:</strong> <span style="color:#00ff9f">{target_price}</span>
                         <hr style="border-color:#333; margin:8px 0">
                         <div style="font-size:11px; color:#666">MARKET SCAN</div>
                         <strong>ADX:</strong> {data['strength']}<br>
@@ -173,11 +187,13 @@ elif mode == "🔮 DEEP SCANNER":
                 c_chart, c_info = st.columns([3, 1])
                 with c_chart: render_chart(symbol, height=800)
                 with c_info:
+                    # FIX LỖI TƯƠNG TỰ Ở CHẾ ĐỘ DEEP SCANNER LUÔN
+                    stoch_color = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
                     st.markdown(f"""
                     <div class="glass-card">
                         <div class="metric-label">OSCILLATORS</div>
                         <div style="margin-top:10px; font-family:'Share Tech Mono'; color:#ccc; font-size:14px;">
-                            <div style="display:flex; justify-content:space-between;"><span>Stoch K</span><span style="color:#fff">{data['stoch_k']:.1f}</span></div>
+                            <div style="display:flex; justify-content:space-between;"><span>Stoch K</span><span style="color:{stoch_color}">{data['stoch_k']:.1f}</span></div>
                             <div style="display:flex; justify-content:space-between;"><span>TREND</span><span style="color:#fff">{data['trend']}</span></div>
                         </div>
                     </div>
