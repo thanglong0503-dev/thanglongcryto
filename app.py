@@ -17,54 +17,67 @@ with c_head:
     st.markdown('<div class="glitch-header">CYBER ORACLE <span style="font-size:20px; color:var(--neon-green)">v18 PRO</span></div>', unsafe_allow_html=True)
 with c_status:
     st.markdown('<div style="text-align:right; font-family:Share Tech Mono; color:#00ff9f; padding-top:15px;">SYSTEM: ONLINE_ <span class="blinking-cursor"></span></div>', unsafe_allow_html=True)
-# ... (Phần import giữ nguyên) ...
-# ... (Phần fetch_data giữ nguyên) ...
-# Thêm import hàm mới
-from backend.data_loader import fetch_data, fetch_global_indices 
+# ... (Phần Import giữ nguyên) ...
+# NHỚ THÊM import fetch_market_overview VÀO DÒNG NÀY NHÉ:
+from backend.data_loader import fetch_data, fetch_global_indices, fetch_market_overview
 
-# ... (Phần set_page_config và Header cũ giữ nguyên) ...
+# ... (Phần set_page_config và CSS giữ nguyên) ...
 
-# === CHÈN ĐOẠN NÀY VÀO SAU HEADER ===
+# 2. HEADER
+c_head, c_status = st.columns([3, 1])
+with c_head:
+    st.markdown('<div class="glitch-header">CYBER ORACLE <span style="font-size:20px; color:var(--neon-green)">v21</span></div>', unsafe_allow_html=True)
+with c_status:
+    st.markdown('<div style="text-align:right; font-family:Share Tech Mono; color:#00ff9f; padding-top:15px;">SYSTEM: ONLINE_ <span class="blinking-cursor"></span></div>', unsafe_allow_html=True)
 
-st.write("") # Khoảng cách
-
-# Gọi hàm lấy dữ liệu vĩ mô
+# --- PHẦN 1: RADA VĨ MÔ (VÀNG/DẦU) ---
+st.write("")
 with st.spinner("🌍 SCANNING GLOBAL MARKETS..."):
     macro_data = fetch_global_indices()
 
 if macro_data:
-    # Chia làm 4 cột nhỏ
     g1, g2, g3, g4 = st.columns(4)
-    
-    # Hàm vẽ thẻ nhỏ (Micro Card)
     def macro_card(label, data):
         symbol = "▲" if data['change'] >= 0 else "▼"
         return f"""
-        <div style="
-            background: rgba(20,20,20,0.6); 
-            border-left: 3px solid {data['color']};
-            padding: 10px; 
-            border-radius: 4px;
-            margin-bottom: 10px;">
-            <div style="font-size:10px; color:#888; letter-spacing:1px;">{label}</div>
-            <div style="font-size:18px; font-weight:bold; color:#fff; font-family:'Orbitron'">
-                {data['price']}
-            </div>
-            <div style="font-size:12px; color:{data['color']};">
-                {symbol} {data['change']:.2f}%
-            </div>
-        </div>
-        """
-    
+        <div style="background: rgba(20,20,20,0.6); border-left: 3px solid {data['color']}; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+            <div style="font-size:10px; color:#888;">{label}</div>
+            <div style="font-size:18px; font-weight:bold; color:#fff; font-family:'Orbitron'">{data['price']}</div>
+            <div style="font-size:12px; color:{data['color']};">{symbol} {data['change']:.2f}%</div>
+        </div>"""
     with g1: st.markdown(macro_card("GOLD (XAU)", macro_data['GOLD']), unsafe_allow_html=True)
     with g2: st.markdown(macro_card("USD INDEX (DXY)", macro_data['DXY']), unsafe_allow_html=True)
     with g3: st.markdown(macro_card("S&P 500", macro_data['S&P500']), unsafe_allow_html=True)
     with g4: st.markdown(macro_card("USD/VND", macro_data['USD/VND']), unsafe_allow_html=True)
 
-# === KẾT THÚC PHẦN CHÈN ===
+# --- PHẦN 2: BẢNG ĐIỆN TỬ TỔNG HỢP (TÍNH NĂNG MỚI) ---
+# Tạo một Expandable (có thể thu gọn) để không chiếm chỗ nếu không cần
+with st.expander("📊 LIVE MARKET OVERVIEW (TOP COINS)", expanded=True):
+    df_overview = fetch_market_overview()
+    
+    if df_overview is not None:
+        # Dùng tính năng Dataframe Column Config của Streamlit để tô màu xanh/đỏ
+        st.dataframe(
+            df_overview,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "SYMBOL": st.column_config.TextColumn("Asset", help="Tên tài sản"),
+                "PRICE ($)": st.column_config.NumberColumn("Price", format="$%.4f"), # Định dạng tiền tệ
+                "24H %": st.column_config.NumberColumn(
+                    "24h Change",
+                    format="%.2f%%",
+                    help="Biến động trong 24h qua"
+                ),
+                "TREND": st.column_config.TextColumn("Trend")
+            }
+        )
+    else:
+        st.warning("⚠️ Market data syncing... Please wait.")
 
-# ... (Tiếp tục phần INPUT và MAIN INTERFACE như cũ) ...
-# ... (Code cũ ở trên giữ nguyên) ...
+# --- PHẦN 3: INPUT VÀ PHÂN TÍCH CHI TIẾT (GIỮ NGUYÊN CODE CŨ TỪ ĐÂY TRỞ XUỐNG) ---
+col_search, col_pad = st.columns([1, 2])
+# ... (Tiếp tục code cũ) ...
 
 # 3. INPUT BAR (NÂNG CẤP V20)
 col_search, col_pad = st.columns([1, 2])
