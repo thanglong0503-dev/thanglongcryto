@@ -1,93 +1,89 @@
 import pandas_ta as ta
+import pandas as pd
+import numpy as np
+
+def calculate_volume_profile(df, bins=50):
+    """
+    Thuật toán tìm POC (Point of Control) - Mức giá có Volume lớn nhất
+    """
+    try:
+        # Lấy khoảng giá cao nhất và thấp nhất trong 200 nến gần nhất
+        price_min = df['low'].min()
+        price_max = df['high'].max()
+        
+        # Tạo các khoảng giá (Buckets)
+        price_range = np.linspace(price_min, price_max, bins)
+        
+        # Tính tổng volume cho mỗi mức giá
+        # (Đây là cách tính đơn giản hóa cho tốc độ Realtime)
+        vol_profile = pd.cut(df['close'], bins=bins, labels=price_range[:-1])
+        vol_by_price = df.groupby(vol_profile)['volume'].sum()
+        
+        # Tìm mức giá có Volume lớn nhất (POC)
+        poc_price = vol_by_price.idxmax()
+        
+        return float(poc_price)
+    except:
+        return 0
 
 def analyze_market(df):
     if df is None: return None
     
     try:
-        # --- 1. TÍNH TOÁN CHỈ BÁO NÂNG CAO ---
-        # Cơ bản
+        # --- 1. CHỈ BÁO CƠ BẢN ---
         df.ta.bbands(length=20, std=2, append=True)
         df.ta.rsi(length=14, append=True)
         df.ta.ema(length=50, append=True)
-        df.ta.ema(length=200, append=True)
         
-        # Nâng cao (V18 Features)
-        df.ta.adx(length=14, append=True) # Trend Strength
-        df.ta.stochrsi(length=14, append=True) # Momentum nhanh
+        # --- 2. TÍNH VOLUME PROFILE (NEW V19) ---
+        poc = calculate_volume_profile(df)
         
-        # Volume Average
-        vol_ma = df['volume'].rolling(window=20).mean()
-        
-        # Lấy dữ liệu nến cuối
         curr = df.iloc[-1]
-        
         price = curr['close']
         rsi = curr.get('RSI_14', 50)
-        
-        # Lấy ADX (Cẩn thận tên cột)
-        adx = curr.get('ADX_14', 0)
-        
-        # Lấy StochRSI (pandas_ta trả về 2 cột k và d)
-        stoch_k = curr.get('STOCHRSIk_14_14_3_3', 0)
-        stoch_d = curr.get('STOCHRSId_14_14_3_3', 0)
         
         # Pivot Points
         pp = (curr['high'] + curr['low'] + curr['close']) / 3
         r1 = (2 * pp) - curr['low']
         s1 = (2 * pp) - curr['high']
         
-        # --- 2. LOGIC PHÂN TÍCH (THE BRAIN) ---
+        # --- 3. LOGIC SĂN CÁ MẬP ---
         signal = "NEUTRAL"
         color = "#888"
         
-        # A. Logic Trend (EMA)
-        trend_status = "SIDEWAY"
-        if 'EMA_50' in curr and 'EMA_200' in curr:
-            if price > curr['EMA_50'] and curr['EMA_50'] > curr['EMA_200']:
-                trend_status = "UPTREND"
-            elif price < curr['EMA_50'] and curr['EMA_50'] < curr['EMA_200']:
-                trend_status = "DOWNTREND"
+        # Kiểm tra giá so với POC (Nam châm hút giá)
+        dist_to_poc = (price - poc) / price * 100
         
-        # B. Logic Sức mạnh (ADX)
-        trend_strength = "WEAK"
-        if adx > 25: trend_strength = "STRONG"
-        if adx > 50: trend_strength = "SUPER STRONG"
-        
-        # C. Logic Volume (Whale Detector)
-        curr_vol = curr['volume']
-        avg_vol = vol_ma.iloc[-1]
-        vol_spike = "NORMAL"
-        if avg_vol > 0:
-            ratio = curr_vol / avg_vol
-            if ratio > 2.0: vol_spike = "🐋 WHALE ALERT"
-            elif ratio > 1.5: vol_spike = "HIGH VOLUME"
-            
-        # D. Tín hiệu tổng hợp
-        if trend_status == "UPTREND" and stoch_k < 20:
-            signal = "PULLBACK BUY (Múc)"
+        poc_status = "FAR"
+        if abs(dist_to_poc) < 0.5: # Nếu giá cách POC dưới 0.5%
+            poc_status = "AT POC ZONE (Cân bằng)"
+            # Tại vùng này, nếu có nến đảo chiều -> Đánh Breakout
+        elif price > poc:
+            poc_status = "ABOVE POC (Phe Mua nắm)"
+        else:
+            poc_status = "BELOW POC (Phe Bán nắm)"
+
+        # Tín hiệu tổng hợp
+        if poc_status == "ABOVE POC" and rsi < 40:
+            signal = "PULLBACK TO POC (Canh Buy)"
             color = "var(--bull)"
-        elif trend_status == "DOWNTREND" and stoch_k > 80:
-            signal = "SHORT SELL (Xả)"
+        elif poc_status == "BELOW POC" and rsi > 60:
+            signal = "REJECT POC (Canh Sell)" # Giống mô hình trong ảnh của Ngài
             color = "var(--bear)"
-        elif rsi < 30:
-            signal = "OVERSOLD (Bắt đáy)"
-            color = "var(--accent)"
-        elif rsi > 70:
-            signal = "OVERBOUGHT (Cẩn thận)"
-            color = "#ff9100"
+        elif abs(dist_to_poc) < 0.2:
+            signal = "FIGHTING AT POC (Chờ)"
+            color = "#fff"
 
         return {
             "price": price,
             "rsi": rsi,
-            "adx": adx,
-            "stoch_k": stoch_k,
             "signal": signal,
             "color": color,
             "r1": r1,
             "s1": s1,
-            "trend": trend_status,
-            "strength": trend_strength,
-            "vol_status": vol_spike
+            "poc": poc, # Trả về giá trị POC để hiển thị
+            "poc_stat": poc_status,
+            "vol_state": "NORMAL"
         }
     except Exception as e:
         print(f"Logic Error: {e}")
