@@ -6,7 +6,7 @@ import time
 import streamlit.components.v1 as components 
 
 # ==========================================
-# 1. CẤU HÌNH GIAO DIỆN (ĐÃ FIX LỖI CHỮ CHÌM)
+# 1. CẤU HÌNH GIAO DIỆN (ĐÃ FIX TOÀN DIỆN UI)
 # ==========================================
 st.set_page_config(
     layout="wide", 
@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS: BINANCE DARK THEME + FIX LỖI UI
+# CSS: BINANCE DARK THEME + FIX LỖI DROPDOWN TRẮNG
 st.markdown("""
 <style>
     /* Import Font Roboto chuẩn sàn */
@@ -35,52 +35,57 @@ st.markdown("""
     }
     
     /* Tiêu đề & Chữ */
-    h1, h2, h3, h4, h5, h6, span, div, label {
+    h1, h2, h3, h4, h5, h6, span, div, label, .stMarkdown {
         color: #eaecef !important;
     }
-    .stCaption { color: #848e9c !important; }
+    .stCaption, small { color: #848e9c !important; }
 
-    /* --- 🔥 FIX LỖI DROPDOWN MENU (CHỮ CHÌM) --- */
-    /* 1. Ép nền của Menu xổ xuống thành màu tối */
-    ul[data-baseweb="menu"] {
+    /* --- 🔥 FIX TRIỆT ĐỂ MENU DROPDOWN BỊ TRẮNG --- */
+    /* 1. Hộp chứa danh sách xổ xuống */
+    div[data-baseweb="popover"], div[data-baseweb="menu"] {
         background-color: #1e2329 !important;
         border: 1px solid #474d57 !important;
     }
     
-    /* 2. Ép màu chữ trong Menu thành màu sáng */
+    /* 2. Các tùy chọn bên trong danh sách */
     li[data-baseweb="option"] {
         color: #eaecef !important;
-        background-color: #1e2329 !important;
+        background-color: transparent !important;
     }
     
-    /* 3. Hiệu ứng Hover (Rê chuột) chuẩn Binance */
+    /* 3. Hiệu ứng Hover & Selected chuẩn Binance */
     li[data-baseweb="option"]:hover, li[aria-selected="true"] {
         background-color: #2b3139 !important;
         color: #fcd535 !important; /* Chữ vàng khi chọn */
     }
 
-    /* 4. Input & Selectbox (Ô chưa mở) */
+    /* --- INPUT & SELECTBOX STYLE --- */
+    /* Ô nhập liệu và ô chọn khi chưa bấm vào */
     div[data-baseweb="select"] > div, .stTextInput > div > div {
         background-color: #2b3139 !important;
         color: #eaecef !important;
         border: 1px solid #474d57 !important;
         border-radius: 4px;
     }
+    /* Màu chữ khi gõ vào ô Input */
+    input[type="text"] {
+        color: #eaecef !important;
+    }
     
-    /* Chỉnh màu icon mũi tên trong selectbox */
+    /* Chỉnh màu icon mũi tên */
     svg[data-baseweb="icon"] {
         fill: #848e9c !important;
     }
 
-    /* --- 🔥 FIX LỖI NÚT BẤM (BUTTON) --- */
+    /* --- NÚT BẤM (BUTTON) --- */
     button[kind="primary"] {
         background-color: #fcd535 !important;
         border: none !important;
         border-radius: 4px !important;
         transition: all 0.2s;
     }
-    /* Ép chữ trong nút thành màu ĐEN ĐẬM để nổi bật trên nền vàng */
-    button[kind="primary"] * {
+    /* Ép chữ trong nút thành màu ĐEN ĐẬM */
+    button[kind="primary"] p {
         color: #1e2329 !important;
         font-weight: 700 !important;
     }
@@ -120,17 +125,19 @@ st.markdown("""
 def init_exchange():
     """Kết nối Binance US/Kraken"""
     try:
-        return ccxt.binanceus({'enableRateLimit': True})
+        # Thử kết nối public để lấy nhiều coin hơn
+        return ccxt.binance({'enableRateLimit': True})
     except:
+        # Fallback nếu bị chặn
         return ccxt.kraken({'enableRateLimit': True})
 
 exchange = init_exchange()
 
 @st.cache_data(ttl=300)
-def get_market_symbols(limit=50):
+def get_market_symbols(limit=60):
     try:
         tickers = exchange.fetch_tickers()
-        symbols = [s for s in tickers if '/USDT' in s]
+        symbols = [s for s in tickers if s.endswith('/USDT')]
         if not symbols: 
             symbols = [s for s in tickers if '/USD' in s]
         sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'] if 'quoteVolume' in tickers[x] else 0, reverse=True)
@@ -159,7 +166,6 @@ def analyze_data_backend(df):
 def render_tradingview_widget(symbol):
     # Format symbol: BTC/USDT -> BINANCE:BTCUSDT
     clean_symbol = symbol.replace('/', '')
-    # Nếu là Kraken thì format khác chút, nhưng mặc định cứ thử Binance trước vì Chart đẹp hơn
     tv_symbol = f"BINANCE:{clean_symbol}"
     
     html_code = f"""
@@ -208,13 +214,38 @@ st.sidebar.caption(f"Connected: {exchange.name.upper()}")
 st.markdown("## 📊 CRYPTO TERMINAL PRO")
 
 if app_mode == "📈 MARKET DASHBOARD":
-    col_sel, col_blank = st.columns([2, 3])
-    with col_sel:
-        # 1. Chọn Coin (ĐÃ FIX LỖI DROPDOWN TRẮNG)
-        coins = get_market_symbols(60)
-        symbol = st.selectbox("CHỌN CẶP GIAO DỊCH", coins, index=0)
+    # Tải danh sách coin trước
+    coins = get_market_symbols(60)
+
+    # --- KHU VỰC TÌM KIẾM HYBRID (MỚI) ---
+    col_search, col_select = st.columns([2, 3])
     
-    with st.spinner("Đang tải dữ liệu..."):
+    with col_search:
+        # Ô nhập tay
+        st.markdown("<small>🔍 TÌM KIẾM NHANH (VD: DOGE, SHIB)</small>", unsafe_allow_html=True)
+        manual_search = st.text_input("Search label", placeholder="Nhập mã...", label_visibility="collapsed")
+        
+    with col_select:
+        # Ô chọn danh sách Top
+        st.markdown("<small>🏆 DANH SÁCH TOP VOL</small>", unsafe_allow_html=True)
+        selected_from_list = st.selectbox("Select label", coins, index=0, label_visibility="collapsed")
+
+    # --- LOGIC XỬ LÝ ƯU TIÊN ---
+    if manual_search:
+        # Nếu người dùng nhập tay, ưu tiên cái nhập tay
+        raw_input = manual_search.upper().strip()
+        # Tự động thêm đuôi /USDT nếu chưa có
+        if "/USDT" not in raw_input:
+             symbol = f"{raw_input}/USDT"
+        else:
+             symbol = raw_input
+        st.caption(f"👉 Đang xem mã nhập tay: **{symbol}**")
+    else:
+        # Nếu không nhập, dùng cái chọn trong danh sách
+        symbol = selected_from_list
+    # ------------------------------------
+    
+    with st.spinner(f"Đang tải dữ liệu cho {symbol}..."):
         df_backend = fetch_candle_data_backend(symbol, '1h', 100)
     
     if not df_backend.empty:
@@ -266,9 +297,10 @@ if app_mode == "📈 MARKET DASHBOARD":
         render_tradingview_widget(symbol)
 
     else:
-        st.error("⚠️ Không thể kết nối đến Backend dữ liệu. Vui lòng kiểm tra lại kết nối mạng hoặc requirements.txt")
+        st.error(f"⚠️ Không tìm thấy dữ liệu cho mã **{symbol}**. Vui lòng kiểm tra lại tên mã (có thể mã này không có cặp USDT trên Binance).")
 
 elif app_mode == "📡 ALPHA SCANNER":
+    # (Phần code Scanner giữ nguyên như cũ)
     st.markdown("### 📡 MÁY QUÉT TÍN HIỆU (RSI EXTREME)")
     st.caption("Quét Top 30 đồng coin thanh khoản cao trên khung 4H")
     
