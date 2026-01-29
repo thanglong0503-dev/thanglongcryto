@@ -6,290 +6,292 @@ import plotly.graph_objects as go
 import time
 
 # ==========================================
-# 1. SYSTEM CONFIGURATION (PROFESSIONAL MODE)
+# 1. CẤU HÌNH GIAO DIỆN (HIGH CONTRAST UI)
 # ==========================================
 st.set_page_config(
     layout="wide", 
     page_title="Terminal Pro", 
-    page_icon="📈",
+    page_icon="📟",
     initial_sidebar_state="expanded"
 )
 
-# CSS: Bloomberg Terminal Style
+# CSS: Ép buộc giao diện Dark Mode & Tăng tương phản
 st.markdown("""
 <style>
-    /* Global Font */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap');
-    html, body, [class*="css"] {
-        font-family: 'Roboto Mono', monospace;
-        background-color: #0e1117;
-        color: #e0e0e0;
+    /* 1. Ép nền đen tuyệt đối */
+    .stApp {
+        background-color: #000000 !important;
+        font-family: 'Consolas', 'Courier New', monospace;
     }
     
-    /* Metrics Styling */
-    div[data-testid="stMetric"] {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        padding: 15px;
-        border-radius: 4px;
+    /* 2. Chỉnh màu chữ toàn bộ hệ thống */
+    h1, h2, h3, h4, h5, h6, p, div, span, label {
+        color: #e0e0e0 !important;
     }
-    label[data-testid="stMetricLabel"] {
-        color: #8b949e;
-        font-size: 0.8rem;
+    
+    /* 3. Sidebar tương phản cao */
+    section[data-testid="stSidebar"] {
+        background-color: #111111 !important;
+        border-right: 2px solid #333 !important;
+    }
+    
+    /* 4. Các Box thông số (Metrics) */
+    div[data-testid="stMetric"] {
+        background-color: #1a1a1a !important;
+        border: 1px solid #444 !important;
+        padding: 10px;
+        border-radius: 0px; /* Vuông vức kiểu Terminal */
     }
     div[data-testid="stMetricValue"] {
-        font-size: 1.5rem;
-        color: #f0f6fc;
-    }
-
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #010409;
-        border-right: 1px solid #30363d;
+        font-weight: bold !important;
     }
     
-    /* Table Styling */
+    /* 5. Bảng dữ liệu (Dataframe) */
     div[data-testid="stDataFrame"] {
-        border: 1px solid #30363d;
+        background-color: #111 !important;
+        border: 1px solid #333 !important;
     }
     
-    /* Buttons */
+    /* 6. Input & Selectbox */
+    .stSelectbox div[data-baseweb="select"] > div {
+        background-color: #222 !important;
+        color: white !important;
+        border-radius: 0px;
+        border: 1px solid #555;
+    }
+    
+    /* 7. Nút bấm (Button) */
     button[kind="primary"] {
-        background-color: #238636;
-        border: none;
-        border-radius: 4px;
-        color: white;
-        transition: 0.2s;
+        background-color: #00ff41 !important; /* Hacker Green */
+        color: black !important;
+        font-weight: bold !important;
+        border-radius: 0px !important;
+        border: none !important;
+        text-transform: uppercase;
     }
     button[kind="primary"]:hover {
-        background-color: #2ea043;
+        box-shadow: 0 0 10px #00ff41;
     }
     
-    /* Headers */
-    h1, h2, h3 {
-        font-family: 'Roboto Mono', monospace;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-    }
-    
-    /* Alert Boxes */
-    div.stAlert {
-        border-radius: 4px;
-        border: 1px solid #30363d;
-    }
+    /* Màu tín hiệu */
+    .color-up { color: #00ff41 !important; }
+    .color-down { color: #ff0055 !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATA ENGINE (ROBUST FETCHING)
+# 2. XỬ LÝ KẾT NỐI (FIX GEO-BLOCKING)
 # ==========================================
 @st.cache_resource
 def init_exchange():
-    """Initialize Binance connection securely"""
-    return ccxt.binance({
-        'enableRateLimit': True,
-        'options': {'defaultType': 'spot'} # Use Spot for better stability on public API
-    })
+    """
+    Sử dụng Binance US để tránh bị chặn IP khi chạy trên Cloud Server (Mỹ).
+    Nếu Binance US lỗi, tự động chuyển sang Kraken.
+    """
+    try:
+        # Ưu tiên 1: Binance US (Hỗ trợ tốt IP Mỹ)
+        return ccxt.binanceus({'enableRateLimit': True})
+    except:
+        # Ưu tiên 2: Kraken (Rất ổn định tại Mỹ)
+        return ccxt.kraken({'enableRateLimit': True})
 
 exchange = init_exchange()
 
 @st.cache_data(ttl=300)
 def get_market_symbols(limit=50):
-    """Fetch active USDT pairs"""
+    """Lấy danh sách cặp tiền USDT"""
     try:
-        if not exchange.has['fetchTickers']:
-            return ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
-            
         tickers = exchange.fetch_tickers()
-        # Filter strictly for USDT pairs and sort by Volume
-        symbols = [
-            s for s in tickers 
-            if '/USDT' in s and 'UP/' not in s and 'DOWN/' not in s
-        ]
-        sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'], reverse=True)
+        # Lọc cặp tiền /USDT (Binance US) hoặc /USD (Kraken)
+        symbols = [s for s in tickers if '/USDT' in s or '/USD' in s]
+        
+        # Sắp xếp theo Volume để lấy coin thanh khoản cao
+        sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'] if 'quoteVolume' in tickers[x] else 0, reverse=True)
         return sorted_symbols[:limit]
     except Exception as e:
-        st.error(f"Connection Error: {e}")
-        return ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
+        # Fallback danh sách cứng nếu API lỗi
+        return ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'ADA/USDT']
 
-def fetch_ohlcv_data(symbol, timeframe, limit=100):
-    """Fetch Candle Data with Error Handling"""
+def fetch_candle_data(symbol, timeframe, limit=100):
+    """Lấy dữ liệu nến an toàn"""
     try:
-        # Retry mechanism
+        # Thử lại 3 lần nếu mạng lag
         for _ in range(3):
             try:
                 bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-                break
-            except ccxt.NetworkError:
-                time.sleep(1)
+                if bars: break
+            except:
+                time.sleep(0.5)
         else:
-            return pd.DataFrame() # Return empty if fails 3 times
+            return pd.DataFrame()
 
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
         return df
-    except Exception as e:
-        st.error(f"Data Fetch Error for {symbol}: {str(e)}")
+    except:
         return pd.DataFrame()
 
 # ==========================================
-# 3. ANALYTICS ENGINE
+# 3. LOGIC PHÂN TÍCH (CORE ENGINE)
 # ==========================================
-def calculate_indicators(df):
+def analyze_data(df):
     if df.empty: return df
-    
-    # Trend Indicators
-    df.ta.ema(length=50, append=True)  # Mid-term trend
-    df.ta.ema(length=200, append=True) # Long-term trend
-    
-    # Momentum
+    # Tính chỉ báo
     df.ta.rsi(length=14, append=True)
-    
-    # Volatility
+    df.ta.ema(length=50, append=True)
     df.ta.bbands(length=20, std=2, append=True)
-    
     return df
 
 # ==========================================
-# 4. PROFESSIONAL UI LAYOUT
+# 4. GIAO DIỆN (TERMINAL STYLE)
 # ==========================================
-
 # --- SIDEBAR ---
-st.sidebar.markdown("### ⚙️ SETTINGS")
-app_mode = st.sidebar.selectbox("VIEW MODE", ["Market Dashboard", "Alpha Scanner"])
+st.sidebar.markdown("### 📡 SYSTEM CONTROL")
+app_mode = st.sidebar.radio("MODE", ["MARKET DASHBOARD", "ALPHA SCANNER"])
 st.sidebar.markdown("---")
-global_tf = st.sidebar.selectbox("TIMEFRAME", ['15m', '1h', '4h', '1d'], index=2)
-global_limit = st.sidebar.slider("DATA POINTS", 50, 500, 200)
+tf = st.sidebar.selectbox("TIMEFRAME", ['15m', '1h', '4h', '1d'], index=2)
 
-# --- MAIN: DASHBOARD ---
-if app_mode == "Market Dashboard":
-    st.title("MARKET OVERVIEW")
+# --- HEADER ---
+st.markdown(f"## 📟 CRYPTO TERMINAL <span style='font-size:14px; color:#666'>:: {exchange.name.upper()} LINKED</span>", unsafe_allow_html=True)
+
+if app_mode == "MARKET DASHBOARD":
+    # 1. Chọn Coin
+    coins = get_market_symbols(50)
+    symbol = st.selectbox("SELECT ASSET", coins)
     
-    # 1. Ticker Selection
-    market_coins = get_market_symbols(50)
-    selected_symbol = st.selectbox("SELECT ASSET", market_coins, index=0)
+    # 2. Lấy dữ liệu
+    df = fetch_candle_data(symbol, tf, 200)
     
-    # 2. Data Fetching
-    with st.spinner("Fetching market data..."):
-        df = fetch_ohlcv_data(selected_symbol, global_tf, global_limit)
-        
     if not df.empty:
-        df = calculate_indicators(df)
-        last_close = df['close'].iloc[-1]
-        prev_close = df['close'].iloc[-2]
-        pct_change = (last_close - prev_close) / prev_close * 100
-        vol_24h = df['volume'].sum()
+        df = analyze_data(df)
+        curr = df.iloc[-1]
+        prev = df.iloc[-2]
+        change = (curr['close'] - prev['close']) / prev['close'] * 100
         
-        # 3. Metrics Row
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("LAST PRICE", f"{last_close:,.4f}", f"{pct_change:+.2f}%")
-        m2.metric("RSI (14)", f"{df['RSI_14'].iloc[-1]:.1f}")
-        m3.metric("EMA Trend", "BULLISH" if last_close > df['EMA_200'].iloc[-1] else "BEARISH")
-        m4.metric("VOLUME", f"{vol_24h:,.0f}")
+        # 3. Hiển thị thông số (High Contrast)
+        c1, c2, c3, c4 = st.columns(4)
         
-        # 4. Professional Chart
+        # Helper tô màu
+        color_price = "#00ff41" if change >= 0 else "#ff0055"
+        
+        c1.markdown(f"""
+        <div style="border:1px solid #444; padding:10px; background:#111;">
+            <div style="color:#888; font-size:12px;">LAST PRICE</div>
+            <div style="font-size:24px; color:{color_price}; font-weight:bold;">{curr['close']:,.4f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        c2.markdown(f"""
+        <div style="border:1px solid #444; padding:10px; background:#111;">
+            <div style="color:#888; font-size:12px;">24H CHANGE</div>
+            <div style="font-size:24px; color:{color_price}; font-weight:bold;">{change:+.2f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        rsi_val = curr['RSI_14']
+        rsi_color = "#00ff41" if rsi_val < 30 else ("#ff0055" if rsi_val > 70 else "#e0e0e0")
+        c3.markdown(f"""
+        <div style="border:1px solid #444; padding:10px; background:#111;">
+            <div style="color:#888; font-size:12px;">RSI (14)</div>
+            <div style="font-size:24px; color:{rsi_color}; font-weight:bold;">{rsi_val:.1f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        vol_state = "HIGH" if curr['volume'] > df['volume'].mean() else "LOW"
+        c4.markdown(f"""
+        <div style="border:1px solid #444; padding:10px; background:#111;">
+            <div style="color:#888; font-size:12px;">VOLUME STATE</div>
+            <div style="font-size:24px; color:#e0e0e0; font-weight:bold;">{vol_state}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 4. Biểu đồ Chuyên nghiệp
+        st.write("") # Spacer
         fig = go.Figure()
         
-        # Candlestick
+        # Nến
         fig.add_trace(go.Candlestick(
             x=df.index,
             open=df['open'], high=df['high'],
             low=df['low'], close=df['close'],
             name='Price',
-            increasing_line_color='#238636', # Professional Green
-            decreasing_line_color='#da3633'  # Professional Red
+            increasing_line_color='#00ff41', # Neon Green
+            decreasing_line_color='#ff0055'  # Neon Red
         ))
         
-        # Indicators
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_50'], line=dict(color='#a371f7', width=1), name='EMA 50'))
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_200'], line=dict(color='#2f81f7', width=1.5), name='EMA 200'))
+        # EMA
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA_50'], line=dict(color='#00d9ff', width=1), name='EMA 50'))
         
-        # BB
-        fig.add_trace(go.Scatter(x=df.index, y=df['BBU_20_2.0'], line=dict(color='rgba(139, 148, 158, 0.3)', width=1), name='UBB', showlegend=False))
-        fig.add_trace(go.Scatter(x=df.index, y=df['BBL_20_2.0'], line=dict(color='rgba(139, 148, 158, 0.3)', width=1), name='LBB', showlegend=False, fill='tonexty'))
-
+        # Layout tối giản
         fig.update_layout(
             height=600,
             template="plotly_dark",
-            paper_bgcolor="#0e1117",
-            plot_bgcolor="#0e1117",
-            margin=dict(l=0, r=0, t=30, b=0),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor='#30363d'),
+            paper_bgcolor="#000000",
+            plot_bgcolor="#000000",
+            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(showgrid=False, linecolor='#333'),
+            yaxis=dict(showgrid=True, gridcolor='#222', side='right'), # Giá bên phải cho chuyên nghiệp
             xaxis_rangeslider_visible=False
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # 5. Data Table
-        with st.expander("RAW DATA & INDICATORS"):
-            st.dataframe(df.sort_index(ascending=False).style.format("{:.4f}"), use_container_width=True)
-            
     else:
-        st.error(f"Unable to fetch data for {selected_symbol}. Possible network restriction on Streamlit Cloud.")
-        st.info("Try refreshing the page or checking requirements.txt")
+        st.error("⚠️ Connection Failed. Retrying...")
 
-# --- MAIN: SCANNER ---
-elif app_mode == "Alpha Scanner":
-    st.title("ALPHA SCANNER")
-    st.caption(f"Scanning Top 30 Assets | Timeframe: {global_tf}")
-    
-    if st.button("RUN SCAN", type="primary"):
-        scan_list = get_market_symbols(30)
+elif app_mode == "ALPHA SCANNER":
+    st.markdown("### 📡 SCANNING PROTOCOL INIT...")
+    if st.button("EXECUTE SCAN", type="primary"):
+        coins = get_market_symbols(30)
         results = []
         
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        # Progress Bar phong cách Terminal
+        my_bar = st.progress(0)
+        status = st.empty()
         
-        for i, symbol in enumerate(scan_list):
-            progress_bar.progress((i+1)/len(scan_list))
-            status_text.text(f"Analyzing {symbol}...")
+        for i, sym in enumerate(coins):
+            my_bar.progress((i+1)/len(coins))
+            status.code(f"SCANNING >> {sym} ...")
             
-            df = fetch_ohlcv_data(symbol, global_tf, limit=50)
+            df = fetch_candle_data(sym, tf, 50)
             if not df.empty:
-                df = calculate_indicators(df)
+                df = analyze_data(df)
                 curr = df.iloc[-1]
-                
-                # Logic
                 rsi = curr['RSI_14']
                 
-                # Calculate Volume Spike
-                vol_ma = df['volume'].rolling(20).mean().iloc[-1]
-                vol_spike = curr['volume'] / vol_ma if vol_ma > 0 else 0
+                sig = "WAIT"
+                if rsi < 30: sig = "OVERSOLD (BUY)"
+                elif rsi > 70: sig = "OVERBOUGHT (SELL)"
                 
-                # Signal Condition
-                condition = "NEUTRAL"
-                if rsi < 30: condition = "OVERSOLD"
-                elif rsi > 70: condition = "OVERBOUGHT"
-                
-                results.append({
-                    "TICKER": symbol,
-                    "PRICE": curr['close'],
-                    "RSI": rsi,
-                    "VOL_SPIKE": vol_spike,
-                    "EMA_CONDITION": "ABOVE EMA50" if curr['close'] > curr['EMA_50'] else "BELOW EMA50",
-                    "SIGNAL": condition
-                })
+                if sig != "WAIT": # Chỉ lấy tín hiệu
+                    results.append({
+                        "SYMBOL": sym,
+                        "PRICE": curr['close'],
+                        "RSI": rsi,
+                        "SIGNAL": sig
+                    })
         
-        progress_bar.empty()
-        status_text.empty()
+        my_bar.empty()
+        status.empty()
         
-        # Display Results
-        res_df = pd.DataFrame(results)
-        if not res_df.empty:
-            # Styling
-            def color_signal(val):
-                color = '#e0e0e0'
-                if val == "OVERSOLD": color = '#238636' # Green
-                elif val == "OVERBOUGHT": color = '#da3633' # Red
+        if results:
+            st.success(f"FOUND {len(results)} SIGNALS")
+            res_df = pd.DataFrame(results)
+            
+            # Tô màu bảng kết quả
+            def style_scan(val):
+                color = 'white'
+                if 'BUY' in str(val): color = '#00ff41'
+                elif 'SELL' in str(val): color = '#ff0055'
                 return f'color: {color}; font-weight: bold'
 
             st.dataframe(
-                res_df.style
-                .map(color_signal, subset=['SIGNAL'])
-                .format({"PRICE": "{:.4f}", "RSI": "{:.1f}", "VOL_SPIKE": "{:.2f}x"}),
+                res_df.style.map(style_scan, subset=['SIGNAL']),
                 use_container_width=True,
-                height=600
+                height=500
             )
         else:
-            st.warning("No data returned from scan.")
+            st.info("NO EXTREME SIGNALS FOUND IN TOP 30 ASSETS.")
+
+st.markdown("---")
+st.caption("SYSTEM STATUS: ONLINE | SERVER: US-EAST | DATA: BINANCE.US / KRAKEN")
