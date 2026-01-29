@@ -17,7 +17,53 @@ with c_head:
     st.markdown('<div class="glitch-header">CYBER ORACLE <span style="font-size:20px; color:var(--neon-green)">v18 PRO</span></div>', unsafe_allow_html=True)
 with c_status:
     st.markdown('<div style="text-align:right; font-family:Share Tech Mono; color:#00ff9f; padding-top:15px;">SYSTEM: ONLINE_ <span class="blinking-cursor"></span></div>', unsafe_allow_html=True)
+# ... (Phần import giữ nguyên) ...
+# ... (Phần fetch_data giữ nguyên) ...
+# Thêm import hàm mới
+from backend.data_loader import fetch_data, fetch_global_indices 
 
+# ... (Phần set_page_config và Header cũ giữ nguyên) ...
+
+# === CHÈN ĐOẠN NÀY VÀO SAU HEADER ===
+
+st.write("") # Khoảng cách
+
+# Gọi hàm lấy dữ liệu vĩ mô
+with st.spinner("🌍 SCANNING GLOBAL MARKETS..."):
+    macro_data = fetch_global_indices()
+
+if macro_data:
+    # Chia làm 4 cột nhỏ
+    g1, g2, g3, g4 = st.columns(4)
+    
+    # Hàm vẽ thẻ nhỏ (Micro Card)
+    def macro_card(label, data):
+        symbol = "▲" if data['change'] >= 0 else "▼"
+        return f"""
+        <div style="
+            background: rgba(20,20,20,0.6); 
+            border-left: 3px solid {data['color']};
+            padding: 10px; 
+            border-radius: 4px;
+            margin-bottom: 10px;">
+            <div style="font-size:10px; color:#888; letter-spacing:1px;">{label}</div>
+            <div style="font-size:18px; font-weight:bold; color:#fff; font-family:'Orbitron'">
+                {data['price']}
+            </div>
+            <div style="font-size:12px; color:{data['color']};">
+                {symbol} {data['change']:.2f}%
+            </div>
+        </div>
+        """
+    
+    with g1: st.markdown(macro_card("GOLD (XAU)", macro_data['GOLD']), unsafe_allow_html=True)
+    with g2: st.markdown(macro_card("USD INDEX (DXY)", macro_data['DXY']), unsafe_allow_html=True)
+    with g3: st.markdown(macro_card("S&P 500", macro_data['S&P500']), unsafe_allow_html=True)
+    with g4: st.markdown(macro_card("USD/VND", macro_data['USD/VND']), unsafe_allow_html=True)
+
+# === KẾT THÚC PHẦN CHÈN ===
+
+# ... (Tiếp tục phần INPUT và MAIN INTERFACE như cũ) ...
 # 3. INPUT
 col_search, col_pad = st.columns([1, 2])
 with col_search:
