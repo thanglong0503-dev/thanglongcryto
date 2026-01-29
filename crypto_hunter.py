@@ -3,19 +3,19 @@ import pandas as pd
 import pandas_ta as ta
 import ccxt
 import time
-import streamlit.components.v1 as components # Thư viện để nhúng TradingView
+import streamlit.components.v1 as components 
 
 # ==========================================
-# 1. CẤU HÌNH GIAO DIỆN CHUẨN BINANCE
+# 1. CẤU HÌNH GIAO DIỆN (ĐÃ FIX LỖI CHỮ CHÌM)
 # ==========================================
 st.set_page_config(
     layout="wide", 
     page_title="Crypto Terminal Pro", 
-    page_icon="📊", # Icon chuyên nghiệp hơn
+    page_icon="📊", 
     initial_sidebar_state="expanded"
 )
 
-# CSS: BINANCE DARK THEME
+# CSS: BINANCE DARK THEME + FIX LỖI UI
 st.markdown("""
 <style>
     /* Import Font Roboto chuẩn sàn */
@@ -23,46 +23,73 @@ st.markdown("""
 
     /* Nền tảng chính */
     .stApp {
-        background-color: #161a1e !important; /* Màu nền Binance */
+        background-color: #161a1e !important; 
         font-family: 'Roboto', sans-serif;
         color: #eaecef;
     }
     
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #1e2329 !important; /* Màu sidebar Binance */
+        background-color: #1e2329 !important; 
         border-right: 1px solid #2b3139;
     }
     
     /* Tiêu đề & Chữ */
-    h1, h2, h3, label, span, div {
+    h1, h2, h3, h4, h5, h6, span, div, label {
         color: #eaecef !important;
     }
     .stCaption { color: #848e9c !important; }
 
-    /* Input & Selectbox */
+    /* --- 🔥 FIX LỖI DROPDOWN MENU (CHỮ CHÌM) --- */
+    /* 1. Ép nền của Menu xổ xuống thành màu tối */
+    ul[data-baseweb="menu"] {
+        background-color: #1e2329 !important;
+        border: 1px solid #474d57 !important;
+    }
+    
+    /* 2. Ép màu chữ trong Menu thành màu sáng */
+    li[data-baseweb="option"] {
+        color: #eaecef !important;
+        background-color: #1e2329 !important;
+    }
+    
+    /* 3. Hiệu ứng Hover (Rê chuột) chuẩn Binance */
+    li[data-baseweb="option"]:hover, li[aria-selected="true"] {
+        background-color: #2b3139 !important;
+        color: #fcd535 !important; /* Chữ vàng khi chọn */
+    }
+
+    /* 4. Input & Selectbox (Ô chưa mở) */
     div[data-baseweb="select"] > div, .stTextInput > div > div {
         background-color: #2b3139 !important;
         color: #eaecef !important;
         border: 1px solid #474d57 !important;
         border-radius: 4px;
     }
+    
+    /* Chỉnh màu icon mũi tên trong selectbox */
+    svg[data-baseweb="icon"] {
+        fill: #848e9c !important;
+    }
 
-    /* Nút bấm chuẩn Binance (Vàng) */
+    /* --- 🔥 FIX LỖI NÚT BẤM (BUTTON) --- */
     button[kind="primary"] {
         background-color: #fcd535 !important;
-        color: #1e2329 !important;
-        font-weight: 600 !important;
         border: none !important;
         border-radius: 4px !important;
         transition: all 0.2s;
+    }
+    /* Ép chữ trong nút thành màu ĐEN ĐẬM để nổi bật trên nền vàng */
+    button[kind="primary"] * {
+        color: #1e2329 !important;
+        font-weight: 700 !important;
     }
     button[kind="primary"]:hover {
         background-color: #e5c230 !important;
         box-shadow: 0 0 10px rgba(252, 213, 53, 0.3);
     }
     
-    /* Custom Metric Card (Thẻ thông số trên đầu) */
+    /* Custom Metric Card */
     .binance-card {
         background-color: #1e2329;
         border-radius: 8px;
@@ -70,12 +97,12 @@ st.markdown("""
         border: 1px solid #2b3139;
         text-align: center;
     }
-    .metric-label { color: #848e9c; font-size: 13px; margin-bottom: 5px; }
-    .metric-value { font-size: 22px; font-weight: 600; }
+    .metric-label { color: #848e9c !important; font-size: 13px; margin-bottom: 5px; }
+    .metric-value { font-size: 22px; font-weight: 600; color: #eaecef !important; }
     
     /* Màu sắc chuẩn Binance */
-    .up-green { color: #0ecb81 !important; } /* Xanh tăng */
-    .down-red { color: #f6465d !important; }  /* Đỏ giảm */
+    .up-green { color: #0ecb81 !important; } 
+    .down-red { color: #f6465d !important; }  
     
     /* Bảng dữ liệu */
     div[data-testid="stDataFrame"] {
@@ -87,11 +114,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. BACKEND XỬ LÝ DỮ LIỆU (Vẫn giữ để chạy Scanner & Metrics)
+# 2. BACKEND XỬ LÝ DỮ LIỆU
 # ==========================================
 @st.cache_resource
 def init_exchange():
-    """Kết nối Binance US/Kraken để tránh bị chặn IP"""
+    """Kết nối Binance US/Kraken"""
     try:
         return ccxt.binanceus({'enableRateLimit': True})
     except:
@@ -101,21 +128,17 @@ exchange = init_exchange()
 
 @st.cache_data(ttl=300)
 def get_market_symbols(limit=50):
-    """Lấy danh sách cặp tiền USDT thanh khoản cao"""
     try:
         tickers = exchange.fetch_tickers()
-        # Ưu tiên cặp USDT trên Binance
         symbols = [s for s in tickers if '/USDT' in s]
-        if not symbols: # Fallback nếu dùng Kraken (ví dụ)
+        if not symbols: 
             symbols = [s for s in tickers if '/USD' in s]
-            
         sorted_symbols = sorted(symbols, key=lambda x: tickers[x]['quoteVolume'] if 'quoteVolume' in tickers[x] else 0, reverse=True)
         return sorted_symbols[:limit]
     except:
         return ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT']
 
 def fetch_candle_data_backend(symbol, timeframe, limit=50):
-    """Lấy dữ liệu nhẹ cho Backend tính toán (không dùng để vẽ chart nữa)"""
     try:
         bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -134,10 +157,11 @@ def analyze_data_backend(df):
 # 3. HÀM NHÚNG TRADINGVIEW WIDGET
 # ==========================================
 def render_tradingview_widget(symbol):
-    # Chuyển đổi format symbol: BTC/USDT -> BINANCE:BTCUSDT
-    tv_symbol = f"BINANCE:{symbol.replace('/', '')}"
+    # Format symbol: BTC/USDT -> BINANCE:BTCUSDT
+    clean_symbol = symbol.replace('/', '')
+    # Nếu là Kraken thì format khác chút, nhưng mặc định cứ thử Binance trước vì Chart đẹp hơn
+    tv_symbol = f"BINANCE:{clean_symbol}"
     
-    # Mã HTML nhúng Widget Advanced Real-Time Chart
     html_code = f"""
     <div class="tradingview-widget-container" style="height:600px;width:100%">
       <div id="tradingview_b8d71" style="height:calc(100% - 32px);width:100%"></div>
@@ -147,21 +171,21 @@ def render_tradingview_widget(symbol):
       {{
       "autosize": true,
       "symbol": "{tv_symbol}",
-      "interval": "60", /* Mặc định khung 1H */
+      "interval": "60", 
       "timezone": "Asia/Ho_Chi_Minh",
-      "theme": "dark", /* Giao diện tối */
-      "style": "1", /* Kiểu nến Nhật */
-      "locale": "vi_VN", /* Tiếng Việt */
+      "theme": "dark", 
+      "style": "1", 
+      "locale": "vi_VN", 
       "enable_publishing": false,
-      "backgroundColor": "#161a1e", /* Màu nền trùng khớp App */
+      "backgroundColor": "#161a1e", 
       "gridColor": "rgba(43, 49, 57, 0.6)",
       "hide_top_toolbar": false,
       "hide_legend": false,
       "save_image": true,
       "toolbar_bg": "#1e2329",
       "studies": [
-        "RSI@tv-basicstudies", /* Thêm sẵn RSI */
-        "MASimple@tv-basicstudies" /* Thêm sẵn MA */
+        "RSI@tv-basicstudies",
+        "MASimple@tv-basicstudies" 
       ],
       "container_id": "tradingview_b8d71"
       }}
@@ -169,7 +193,6 @@ def render_tradingview_widget(symbol):
       </script>
     </div>
     """
-    # Render widget bằng components.html
     components.html(html_code, height=610)
 
 # ==========================================
@@ -187,14 +210,12 @@ st.markdown("## 📊 CRYPTO TERMINAL PRO")
 if app_mode == "📈 MARKET DASHBOARD":
     col_sel, col_blank = st.columns([2, 3])
     with col_sel:
-        # 1. Chọn Coin
+        # 1. Chọn Coin (ĐÃ FIX LỖI DROPDOWN TRẮNG)
         coins = get_market_symbols(60)
         symbol = st.selectbox("CHỌN CẶP GIAO DỊCH", coins, index=0)
     
-    # 2. Lấy dữ liệu Backend để hiển thị số liệu (Metrics)
-    # Chúng ta vẫn cần backend để tính % thay đổi và RSI chính xác
     with st.spinner("Đang tải dữ liệu..."):
-        df_backend = fetch_candle_data_backend(symbol, '1h', 100) # Mặc định lấy khung 1H cho metrics
+        df_backend = fetch_candle_data_backend(symbol, '1h', 100)
     
     if not df_backend.empty:
         df_backend = analyze_data_backend(df_backend)
@@ -202,10 +223,9 @@ if app_mode == "📈 MARKET DASHBOARD":
         prev = df_backend.iloc[-2]
         change_pct = (curr['close'] - prev['close']) / prev['close'] * 100
         
-        # 3. Hiển thị Metrics (Style Binance Cards)
+        # 3. Metrics
         m1, m2, m3, m4 = st.columns(4)
         
-        # Helper xác định màu
         color_class = "up-green" if change_pct >= 0 else "down-red"
         sign = "+" if change_pct >= 0 else ""
         
@@ -232,7 +252,7 @@ if app_mode == "📈 MARKET DASHBOARD":
                 <div class="metric-value" style="color: {rsi_color}">{rsi_val:.1f}</div>
             </div>""", unsafe_allow_html=True)
             
-        vol_24h_est = df_backend['volume'].sum() * curr['close'] # Ước tính Vol USDT
+        vol_24h_est = df_backend['volume'].sum() * curr['close']
         with m4:
              st.markdown(f"""
             <div class="binance-card">
@@ -240,12 +260,10 @@ if app_mode == "📈 MARKET DASHBOARD":
                 <div class="metric-value">{vol_24h_est:,.0f}$</div>
             </div>""", unsafe_allow_html=True)
 
-        # 4. NHÚNG TRADINGVIEW WIDGET
-        st.write("") # Khoảng cách
-        st.markdown("### BIỂU ĐỒ KỸ THUẬT (TradingView)")
-        # Gọi hàm render widget
+        # 4. BIỂU ĐỒ TRADINGVIEW
+        st.write("") 
+        st.markdown("### BIỂU ĐỒ KỸ THUẬT")
         render_tradingview_widget(symbol)
-        st.caption("💡 Mẹo: Sử dụng thanh công cụ bên trái và phía trên biểu đồ để vẽ và thêm chỉ báo.")
 
     else:
         st.error("⚠️ Không thể kết nối đến Backend dữ liệu. Vui lòng kiểm tra lại kết nối mạng hoặc requirements.txt")
@@ -261,14 +279,12 @@ elif app_mode == "📡 ALPHA SCANNER":
         scan_bar = st.progress(0)
         status_txt = st.empty()
         
-        # Quét trên khung 4H cho tín hiệu uy tín hơn
         scan_tf = '4h' 
         
         for i, sym in enumerate(scan_coins):
             scan_bar.progress((i+1)/len(scan_coins))
             status_txt.text(f"Đang phân tích: {sym}...")
             
-            # Lấy ít dữ liệu thôi cho nhanh
             df = fetch_candle_data_backend(sym, scan_tf, 30) 
             if not df.empty:
                 df = analyze_data_backend(df)
@@ -276,11 +292,10 @@ elif app_mode == "📡 ALPHA SCANNER":
                 rsi = curr['RSI_14']
                 
                 sig = "CHỜ"
-                # Tăng độ khó tín hiệu
-                if rsi < 25: sig = "MUA MẠNH (Quá bán sâu)"
-                elif rsi < 30: sig = "MUA (Quá bán)"
-                elif rsi > 75: sig = "BÁN MẠNH (Quá mua đỉnh)"
-                elif rsi > 70: sig = "BÁN (Quá mua)"
+                if rsi < 25: sig = "MUA MẠNH"
+                elif rsi < 30: sig = "MUA"
+                elif rsi > 75: sig = "BÁN MẠNH"
+                elif rsi > 70: sig = "BÁN"
                 
                 if sig != "CHỜ":
                     results.append({
@@ -297,11 +312,10 @@ elif app_mode == "📡 ALPHA SCANNER":
             st.success(f"✅ Tìm thấy {len(results)} cơ hội tiềm năng!")
             res_df = pd.DataFrame(results)
             
-            # Tô màu bảng kết quả chuẩn Binance
             def style_binance_scan(val):
                 color = '#eaecef'
-                if 'MUA' in str(val): color = '#0ecb81' # Xanh Binance
-                elif 'BÁN' in str(val): color = '#f6465d' # Đỏ Binance
+                if 'MUA' in str(val): color = '#0ecb81' 
+                elif 'BÁN' in str(val): color = '#f6465d' 
                 return f'color: {color}; font-weight: 600'
 
             st.dataframe(
