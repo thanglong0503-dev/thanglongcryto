@@ -1,21 +1,27 @@
 import yfinance as yf
 import pandas as pd
-import requests # Dùng để gọi API trực tiếp nếu thư viện tạch
+import requests
 
 def fetch_data(symbol):
     """
-    CHIẾN THUẬT HYDRA:
-    1. Thử lấy từ Yahoo Finance.
-    2. Nếu Yahoo tạch -> Lấy trực tiếp từ Binance HTTP API (Rất khó bị chặn).
+    HYDRA ENGINE V2 (Hỗ trợ Crypto + Vàng + Forex)
     """
     symbol = symbol.upper()
     
-    # --- CÁCH 1: YAHOO FINANCE ---
-    try:
+    # 1. XỬ LÝ MÃ (SYMBOL MAPPING)
+    # Nếu là Vàng, Dầu, Forex thì giữ nguyên mã Yahoo
+    if symbol in ['GC=F', 'CL=F', '^GSPC', 'EURUSD=X', 'JPY=X']:
+        yf_sym = symbol
+        is_crypto = False
+    else:
+        # Nếu là Crypto thì thêm đuôi -USD
         yf_sym = symbol.replace('/', '-')
         if not yf_sym.endswith('-USD') and 'USD' not in yf_sym:
             yf_sym += '-USD'
+        is_crypto = True
             
+    # 2. GỌI API YAHOO (Ưu tiên)
+    try:
         df = yf.download(yf_sym, period="1mo", interval="1h", progress=False)
         
         if not df.empty:
@@ -23,39 +29,27 @@ def fetch_data(symbol):
                 df.columns = df.columns.get_level_values(0)
             df = df.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'})
             return df, "YAHOO_OK"
-            
-    except Exception as e:
-        print(f"Yahoo failed: {e}")
+    except: pass
 
-    # --- CÁCH 2: BINANCE DIRECT API (Vũ khí bí mật) ---
-    # Cách này gọi thẳng vào server Binance không qua thư viện trung gian, tỷ lệ sống 99%
-    try:
-        # Chuẩn hóa mã: BTC -> BTCUSDT
-        binance_sym = symbol.replace('/', '').replace('-', '').replace('USD', 'USDT')
-        if not binance_sym.endswith('USDT'):
-            binance_sym += 'USDT'
+    # 3. GỌI API BINANCE (Chỉ dành cho Crypto dự phòng)
+    if is_crypto:
+        try:
+            binance_sym = symbol.replace('/', '').replace('-', '').replace('USD', 'USDT')
+            if not binance_sym.endswith('USDT'): binance_sym += 'USDT'
             
-        url = f"https://api.binance.com/api/v3/klines?symbol={binance_sym}&interval=1h&limit=200"
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        
-        # Nếu API trả về lỗi (dạng dictionary có code lỗi)
-        if isinstance(data, dict) and 'code' in data:
-            return None, f"BINANCE_ERROR: {data.get('msg')}"
+            url = f"https://api.binance.com/api/v3/klines?symbol={binance_sym}&interval=1h&limit=200"
+            data = requests.get(url, timeout=3).json()
             
-        # Xử lý dữ liệu thô từ Binance
-        df = pd.DataFrame(data, columns=['t', 'open', 'high', 'low', 'close', 'volume', 'T', 'q', 'n', 'V', 'Q', 'B'])
-        df['t'] = pd.to_datetime(df['t'], unit='ms')
-        df.set_index('t', inplace=True)
+            if isinstance(data, list):
+                df = pd.DataFrame(data, columns=['t', 'open', 'high', 'low', 'close', 'volume', 'T', 'q', 'n', 'V', 'Q', 'B'])
+                df['t'] = pd.to_datetime(df['t'], unit='ms')
+                df.set_index('t', inplace=True)
+                cols = ['open', 'high', 'low', 'close', 'volume']
+                df[cols] = df[cols].astype(float)
+                return df, "BINANCE_OK"
+        except: pass
         
-        # Ép kiểu số (quan trọng)
-        cols = ['open', 'high', 'low', 'close', 'volume']
-        df[cols] = df[cols].astype(float)
-        
-        return df, "BINANCE_DIRECT_OK"
-        
-    except Exception as e:
-        return None, f"ALL_FAILED: {str(e)}"
+    return None, "NO_DATA"
 # ... (Giữ nguyên phần import và hàm fetch_data cũ ở trên) ...
 
 def fetch_global_indices():
