@@ -2,37 +2,52 @@ import pandas_ta as ta
 import pandas as pd
 import numpy as np
 
-def calculate_volume_profile(df, bins=50):
-    """Tính toán POC (Point of Control) - Mức giá Volume lớn nhất"""
+def calculate_volume_profile(df, bins=100):
+    """
+    FIXED: Sử dụng Numpy Histogram để tính POC chính xác 100%
+    """
     try:
-        price_min = df['low'].min()
-        price_max = df['high'].max()
-        price_range = np.linspace(price_min, price_max, bins)
-        vol_profile = pd.cut(df['close'], bins=bins, labels=price_range[:-1])
-        vol_by_price = df.groupby(vol_profile)['volume'].sum()
-        return float(vol_by_price.idxmax())
-    except:
+        # 1. Chuyển dữ liệu sang dạng mảng số (Array) cho nhanh
+        prices = df['close'].values
+        volumes = df['volume'].values
+
+        # 2. Kiểm tra dữ liệu rỗng
+        if len(prices) == 0 or len(volumes) == 0:
+            return 0.0
+
+        # 3. Dùng Histogram để gom giá vào 100 cái xô (bins)
+        # weights=volumes nghĩa là: đếm giá dựa trên khối lượng giao dịch
+        counts, bin_edges = np.histogram(prices, bins=bins, weights=volumes)
+
+        # 4. Tìm cái xô nào chứa nhiều Volume nhất
+        max_index = counts.argmax()
+
+        # 5. POC chính là giá trung tâm của cái xô đó
+        poc_price = (bin_edges[max_index] + bin_edges[max_index+1]) / 2
+
+        return float(poc_price)
+    except Exception as e:
+        print(f"POC Error: {e}")
         return 0.0
 
 def analyze_market(df):
     if df is None: return None
     
     try:
-        # --- 1. TÍNH TOÁN CHỈ BÁO (FULL OPTION) ---
-        # Cơ bản
+        # --- 1. TÍNH TOÁN CHỈ BÁO ---
         df.ta.bbands(length=20, std=2, append=True)
         df.ta.rsi(length=14, append=True)
         df.ta.ema(length=50, append=True)
         df.ta.ema(length=200, append=True)
         
-        # Nâng cao (V18: Stoch & ADX)
+        # Stoch & ADX
         df.ta.adx(length=14, append=True) 
         df.ta.stochrsi(length=14, append=True)
         
-        # Volume Profile (V19: POC)
-        poc = calculate_volume_profile(df)
+        # --- QUAN TRỌNG: TÍNH POC BẰNG THUẬT TOÁN MỚI ---
+        poc = calculate_volume_profile(df, bins=100)
         
-        # Volume Average (V18: Cá mập)
+        # Volume Average
         vol_ma = df['volume'].rolling(window=20).mean()
         
         # --- 2. LẤY DỮ LIỆU ---
@@ -42,9 +57,6 @@ def analyze_market(df):
         # Lấy chỉ số an toàn
         rsi = curr.get('RSI_14', 50)
         adx = curr.get('ADX_14', 0)
-        
-        # Lấy StochRSI (Tên cột thường khá dài, cần lấy đúng)
-        # Pandas TA thường đặt tên là STOCHRSIk... và STOCHRSId...
         stoch_k = curr.get('STOCHRSIk_14_14_3_3', 0)
         
         # Pivot Points
@@ -74,11 +86,17 @@ def analyze_market(df):
             vol_status = "🐋 WHALE"
             
         # D. Logic POC (Volume Profile)
-        dist_poc = (price - poc) / price * 100
-        poc_stat = "AT POC" if abs(dist_poc) < 0.5 else ("ABOVE" if price > poc else "BELOW")
-        
-        # E. Tín hiệu Tổng hợp (Signal)
-        # Ưu tiên tín hiệu POC Rejection (Mô hình Ngài gửi)
+        # Fix lỗi chia cho 0 nếu POC = 0 (trường hợp hiếm)
+        if poc > 0:
+            dist_poc = (price - poc) / price * 100
+            if abs(dist_poc) < 0.5: poc_stat = "AT POC"
+            elif price > poc: poc_stat = "ABOVE"
+            else: poc_stat = "BELOW"
+        else:
+            poc_stat = "CALC..."
+            dist_poc = 0
+
+        # E. Tín hiệu Tổng hợp
         if poc_stat == "BELOW" and rsi > 60:
             signal = "REJECT POC (Sell)"
             color = "var(--bear)"
@@ -92,13 +110,12 @@ def analyze_market(df):
             signal = "OVERBOUGHT (Sell)"
             color = "#ff9100"
 
-        # --- 4. TRẢ VỀ KẾT QUẢ (QUAN TRỌNG: PHẢI CÓ ĐỦ KEY) ---
         return {
             "price": price,
             "rsi": rsi,
             "adx": adx,
-            "stoch_k": stoch_k,   # Khắc phục lỗi KeyError: 'stoch_k'
-            "poc": poc,           # Khắc phục lỗi KeyError: 'poc'
+            "stoch_k": stoch_k,
+            "poc": poc,
             "poc_stat": poc_stat,
             "signal": signal,
             "color": color,
