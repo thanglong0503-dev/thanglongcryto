@@ -64,11 +64,43 @@ if macro_data:
 # === KẾT THÚC PHẦN CHÈN ===
 
 # ... (Tiếp tục phần INPUT và MAIN INTERFACE như cũ) ...
-# 3. INPUT
+# ... (Code cũ ở trên giữ nguyên) ...
+
+# 3. INPUT BAR (NÂNG CẤP V20)
 col_search, col_pad = st.columns([1, 2])
 with col_search:
-    manual = st.text_input("COMMAND_LINE", value="BTC", placeholder="ENTER SYMBOL...", label_visibility="collapsed")
-symbol = manual.upper()
+    # DANH SÁCH TÀI SẢN KHỔNG LỒ
+    ASSETS = {
+        "🔥 POPULAR": ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "LINK"],
+        "💰 COMMODITIES & FX": ["GC=F", "CL=F", "EURUSD=X", "^GSPC"], # Vàng, Dầu, Euro, S&P500
+        "🚀 MEME & ALTS": ["PEPE", "SHIB", "BONK", "WIF", "FLOKI", "SUI", "APT", "ARB", "OP", "TIA", "SEI", "INJ", "RNDR", "FET", "NEAR", "AVAX", "DOT", "MATIC", "LTC", "BCH", "UNI", "FIL", "ATOM", "IMX", "VET", "GRT", "STX", "THETA", "RUNE", "AAVE", "ALGO", "EGLD", "SAND", "AXS", "MANA", "EOS", "XTZ", "NEO", "MKR", "SNX", "KCS", "LDO", "QNT", "FLOW", "GALA", "CHZ", "CRV", "MINA", "FXS", "KLAY", "HBAR", "FTM", "EOS", "IOTA", "XLM"]
+    }
+    
+    # Gộp lại thành 1 list phẳng để tìm kiếm
+    flat_list = []
+    for category, items in ASSETS.items():
+        flat_list.extend(items)
+    
+    # Thêm tùy chọn nhập tay nếu muốn
+    flat_list.append("...TYPE CUSTOM...")
+
+    # Widget chọn (Có thể gõ phím để tìm)
+    selected_asset = st.selectbox(
+        "SELECT ASSET", 
+        flat_list, 
+        index=0, 
+        label_visibility="collapsed"
+    )
+
+    # Logic xử lý
+    if selected_asset == "...TYPE CUSTOM...":
+        manual_input = st.text_input("ENTER CUSTOM SYMBOL", "BTC")
+        symbol = manual_input.upper()
+    else:
+        # Nếu chọn Vàng (GC=F) thì giữ nguyên, còn lại là Coin
+        symbol = selected_asset
+
+# ... (Tiếp tục phần MAIN INTERFACE bên dưới như cũ) ...
 
 # 4. DASHBOARD
 st.write("---")
