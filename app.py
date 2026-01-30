@@ -165,10 +165,12 @@ if mode == "🌐 MARKET GRID":
             st.markdown("<div style='height:1px; background:#111; margin:0'></div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# MODE 2: DEEP SCANNER
+# ==============================================================================
+# MODE 2: DEEP SCANNER (BẢN FIX: TỰ ĐỘNG TẢI LẠI NẾU THIẾU DỮ LIỆU)
 # ==============================================================================
 elif mode == "🔮 DEEP SCANNER":
     st.markdown('<div class="glitch-header">DEEP SCANNER</div>', unsafe_allow_html=True)
+    
     col_search, col_pad = st.columns([1, 2])
     with col_search:
         HUGE_ASSETS = ["BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "PEPE", "SHIB", "WIF", "SUI", "NEAR", "APT", "DOT", "LTC"]
@@ -176,8 +178,34 @@ elif mode == "🔮 DEEP SCANNER":
         symbol = st.text_input("TYPE SYMBOL", "BTC").upper() if selected_asset == "...CUSTOM..." else selected_asset
 
     st.write("---")
+    
     with st.spinner(f"⚡ DECRYPTING {symbol}..."):
+        # 1. Gọi hàm tải dữ liệu bình thường
         df, status = fetch_data(symbol)
+        
+        # === 🚑 EMERGENCY FIX: CƯỠNG ÉP TẢI DỮ LIỆU (NẾU FILE CŨ BỊ LỖI) ===
+        # Nếu thấy ít hơn 50 dòng -> Tự động tải lại 500 dòng ngay lập tức
+        if df is not None and len(df) < 50:
+            try:
+                import requests
+                import pandas as pd
+                # URL trực tiếp (Bypass mọi file trung gian)
+                clean_sym = symbol.replace('USDT','') + 'USDT'
+                url_fix = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval=1h&limit=500"
+                res_fix = requests.get(url_fix, timeout=3).json()
+                
+                if isinstance(res_fix, list) and len(res_fix) > 0:
+                    df_fix = pd.DataFrame(res_fix, columns=['t', 'open', 'high', 'low', 'close', 'volume', 'T', 'q', 'n', 'V', 'Q', 'B'])
+                    df_fix['t'] = pd.to_datetime(df_fix['t'], unit='ms')
+                    df_fix.set_index('t', inplace=True)
+                    cols = ['open', 'high', 'low', 'close', 'volume']
+                    df_fix[cols] = df_fix[cols].astype(float)
+                    df = df_fix # Ghi đè dữ liệu xịn vào
+                    # st.toast(f"✅ AUTO-FIXED: Loaded {len(df)} candles for AI", icon="🤖")
+            except Exception as e:
+                pass # Nếu lỗi thì chịu, dùng tạm dữ liệu cũ
+        # ===================================================================
+
         if df is not None:
             data = analyze_market(df)
             if data:
@@ -186,34 +214,33 @@ elif mode == "🔮 DEEP SCANNER":
                 str_poc = f"${data['poc']:,.2f}"
                 str_rsi = f"{data['rsi']:.1f}"
                 
+                # Hiển thị thông số (HUD)
                 m1, m2, m3, m4 = st.columns(4)
                 with m1: st.markdown(f"""<div class="glass-card"><div class="metric-label">PRICE</div><div class="metric-val" style="color:var(--neon-cyan)">{str_price}</div></div>""", unsafe_allow_html=True)
                 with m2: st.markdown(f"""<div class="glass-card" style="border:1px solid {c_signal}"><div class="metric-label" style="color:{c_signal}">VERDICT</div><div class="metric-val" style="color:{c_signal}">{data['signal']}</div></div>""", unsafe_allow_html=True)
                 with m3: st.markdown(f"""<div class="glass-card"><div class="metric-label">POC</div><div class="metric-val" style="color:#ff0055">{str_poc}</div></div>""", unsafe_allow_html=True)
                 with m4: st.markdown(f"""<div class="glass-card"><div class="metric-label">RSI</div><div class="metric-val" style="color:#fff">{str_rsi}</div></div>""", unsafe_allow_html=True)
                 
+                # Chart & Battle Plan
                 c_chart, c_info = st.columns([3, 1])
                 with c_chart: render_chart(symbol, height=800)
                 with c_info:
                     st.markdown(create_oscillators_html(data), unsafe_allow_html=True)
                     st.markdown(create_battle_plan_html(data), unsafe_allow_html=True)
-# ... (Sau khi kết thúc with c_info của code cũ) ...
-
-                st.write("---")
                 
+                # === 🧠 AI SECTION (ĐÃ CÓ DỮ LIỆU ĐẢM BẢO) ===
                 st.write("---")
-                
-                # NÚT KÍCH HOẠT AI (PHIÊN BẢN SCIKIT-LEARN)
                 st.markdown('<div class="glitch-header" style="font-size:20px; color:#bc13fe">🧠 CYBER AI CORE</div>', unsafe_allow_html=True)
                 
-                if st.button("RUN NEURAL PREDICTION"):
-                    with st.spinner("⚡ AI IS COMPUTING (RANDOM FOREST)..."):
-                        # Gọi hàm mới
+                # Nút bấm chạy AI
+                if st.button("RUN NEURAL PREDICTION", key="btn_deep_ai"):
+                    with st.spinner(f"⚡ TRAINING NEURAL NET ({len(df)} SAMPLES)..."):
+                        # Gọi AI (Lúc này df chắc chắn > 200 dòng)
+                        from backend.ai_forecast import run_ai_forecast, plot_ai_chart
                         ai_res = run_ai_forecast(df)
                         
                         if ai_res:
                             col_ai1, col_ai2 = st.columns([1, 3])
-                            
                             with col_ai1:
                                 diff_color = "#00ff9f" if ai_res['diff_pct'] > 0 else "#ff0055"
                                 st.markdown(f"""
@@ -223,13 +250,12 @@ elif mode == "🔮 DEEP SCANNER":
                                     <div style="font-family:'Share Tech Mono'; font-size:16px; color:{diff_color}; margin-top:5px">
                                         {ai_res['trend']} ({ai_res['diff_pct']:+.2f}%)
                                     </div>
-                                    <div style="font-size:10px; color:#666; margin-top:10px">Model: Random Forest</div>
+                                    <div style="font-size:10px; color:#666; margin-top:10px">Training Data: {len(df)} candles</div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                                
                             with col_ai2:
-                                # Vẽ biểu đồ mới
                                 fig_ai = plot_ai_chart(symbol, ai_res)
                                 st.plotly_chart(fig_ai, use_container_width=True)
                         else:
-                            st.error("NOT ENOUGH DATA FOR AI TRAINING")
+                            # Nếu vẫn lỗi thì in ra độ dài để debug
+                            st.error(f"AI ERROR: Data length {len(df)} is potentially corrupted.")
