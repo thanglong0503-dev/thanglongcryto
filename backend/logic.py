@@ -8,8 +8,26 @@ def analyze_market(df):
     if df is None or df.empty: return None
     
     # --- 1. TÍNH TOÁN CHỈ BÁO (QUAN TRỌNG: PHẢI CÓ ĐOẠN NÀY) ---
-    # Bollinger Bands (20, 2)
-    bb = df.ta.bbands(length=20, std=2)
+ # --- 1. TÍNH BOLLINGER BANDS (THỦ CÔNG - AN TOÀN TUYỆT ĐỐI) ---
+    # Thay vì phụ thuộc vào pandas_ta (hay đổi tên cột), ta tự tính:
+    # Mid = SMA 20
+    df['bb_mid'] = df['close'].rolling(window=20).mean()
+    # Std = Độ lệch chuẩn 20
+    std_dev = df['close'].rolling(window=20).std()
+    
+    # Upper = Mid + 2*Std
+    df['bb_upper'] = df['bb_mid'] + (std_dev * 2)
+    # Lower = Mid - 2*Std
+    df['bb_lower'] = df['bb_mid'] - (std_dev * 2)
+    
+    # Lấp đầy dữ liệu trống (NaN) ở những cây nến đầu tiên để tránh lỗi vẽ
+    df['bb_upper'] = df['bb_upper'].fillna(method='bfill')
+    df['bb_lower'] = df['bb_lower'].fillna(method='bfill')
+    df['bb_mid'] = df['bb_mid'].fillna(method='bfill')
+
+    # --- CÁC CHỈ BÁO KHÁC (GIỮ NGUYÊN) ---
+    df['rsi'] = df.ta.rsi(length=14)
+    # ... (code bên dưới giữ nguyên)
     # Gán vào DataFrame để Plot Engine dùng
     # Lưu ý: pandas_ta trả về tên cột kiểu BBL_20_2.0, BBM_20_2.0, BBU_20_2.0
     # Chúng ta đổi tên cho gọn để plot_engine dễ gọi
