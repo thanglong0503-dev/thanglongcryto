@@ -1,120 +1,130 @@
 import pandas as pd
-from prophet import Prophet
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
 import plotly.graph_objects as go
-import logging
 
-# Tắt log rác của Prophet
-logging.getLogger('prophet').setLevel(logging.WARNING)
-logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
-
-def run_prophet_forecast(df, periods=12):
+def run_ai_forecast(df, periods=12):
     """
-    Chạy model Meta Prophet (Bản tối ưu cho dữ liệu ngắn hạn)
+    CYBER AI ENGINE: Dùng Random Forest để dự báo giá.
     """
     try:
-        # 1. CHUẨN BỊ DỮ LIỆU
-        # Prophet yêu cầu 2 cột: 'ds' (thời gian) và 'y' (giá trị)
-        data = df.reset_index()[['t', 'close']].rename(columns={'t': 'ds', 'close': 'y'})
+        # 1. CHUẨN BỊ DỮ LIỆU (FEATURE ENGINEERING)
+        data = df.copy()
+        data = data.reset_index()
         
-        # --- FIX QUAN TRỌNG 1: XÓA TIMEZONE ---
-        # Prophet rất hay lỗi nếu cột thời gian có múi giờ (UTC+7...)
-        if data['ds'].dt.tz is not None:
-            data['ds'] = data['ds'].dt.tz_localize(None)
-            
-        # Đảm bảo dữ liệu sạch
+        # Tạo biến để AI học (Lag features)
+        # Học giá của 3 giờ trước đó
+        data['lag_1'] = data['close'].shift(1)
+        data['lag_2'] = data['close'].shift(2)
+        data['lag_3'] = data['close'].shift(3)
+        
+        # Thêm chỉ báo kỹ thuật vào để AI thông minh hơn
+        # (Nếu df đã có RSI/SMA từ logic.py thì dùng, ko thì tính tạm)
+        data['ma_5'] = data['close'].rolling(window=5).mean()
+        
+        # Xóa dòng thiếu dữ liệu (do shift)
         data = data.dropna()
-        if len(data) < 30: return None # Không đủ dữ liệu thì thôi
+        
+        if len(data) < 30: return None
 
-        # 2. CẤU HÌNH MODEL (BẢN LITE)
-        # Vì ta chỉ load 200 nến (~8 ngày), nên KHÔNG ĐƯỢC bật weekly_seasonality
-        m = Prophet(
-            daily_seasonality=True,  # Tìm quy luật trong ngày (ví dụ: sáng tăng chiều giảm)
-            weekly_seasonality=False, # <--- TẮT CÁI NÀY ĐỂ TRÁNH LỖI CONVERGE
-            yearly_seasonality=False,
-            changepoint_prior_scale=0.05, # Độ nhạy
-            growth='linear'
-        )
+        # 2. TẠO MODEL
+        # X = Dữ liệu đầu vào (Quá khứ), y = Kết quả (Hiện tại)
+        features = ['lag_1', 'lag_2', 'lag_3', 'ma_5', 'volume']
+        X = data[features]
+        y = data['close']
         
-        # 3. TRAIN (HỌC)
-        m.fit(data)
+        # Dùng Random Forest (Rừng ngẫu nhiên) - Nhẹ và mạnh
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        model.fit(X, y)
         
-        # 4. DỰ BÁO
-        future = m.make_future_dataframe(periods=periods, freq='H')
-        forecast = m.predict(future)
+        # 3. DỰ BÁO TƯƠNG LAI (RECURSIVE FORECAST)
+        # Vì ta cần dự báo 12h tới, ta phải dự báo từng bước một
+        future_preds = []
+        last_row = data.iloc[-1].copy()
         
-        # 5. KẾT QUẢ
-        future_forecast = forecast.tail(periods)
-        predicted_price = future_forecast.iloc[-1]['yhat']
-        current_price = data.iloc[-1]['y']
+        for _ in range(periods):
+            # Tạo input cho bước tiếp theo từ kết quả vừa dự đoán
+            input_data = pd.DataFrame([{
+                'lag_1': last_row['close'],
+                'lag_2': last_row['lag_1'],
+                'lag_3': last_row['lag_2'],
+                'ma_5': (last_row['close'] + last_row['ma_5']*4)/5, # Ước lượng MA
+                'volume': last_row['volume'] # Giả định vol giữ nguyên
+            }])
+            
+            pred = model.predict(input_data)[0]
+            future_preds.append(pred)
+            
+            # Cập nhật last_row để dự báo bước kế tiếp
+            last_row['lag_3'] = last_row['lag_2']
+            last_row['lag_2'] = last_row['lag_1']
+            last_row['lag_1'] = pred
+            last_row['close'] = pred
+            
+        # 4. ĐÓNG GÓI KẾT QUẢ
+        last_date = data['t'].iloc[-1]
+        future_dates = [last_date + pd.Timedelta(hours=i+1) for i in range(periods)]
         
-        trend = "BULLISH 🚀" if predicted_price > current_price else "BEARISH 🩸"
+        forecast_df = pd.DataFrame({
+            'ds': future_dates,
+            'yhat': future_preds
+        })
+        
+        current_price = data.iloc[-1]['close']
+        predicted_price = future_preds[-1]
+        
         diff_pct = ((predicted_price - current_price) / current_price) * 100
+        trend = "BULLISH 🚀" if diff_pct > 0 else "BEARISH 🩸"
         
         return {
-            "forecast_df": forecast,
+            "forecast_df": forecast_df,
             "predicted_price": predicted_price,
             "trend": trend,
             "diff_pct": diff_pct,
-            "model": m
+            "history": data[['t', 'close']] # Để vẽ biểu đồ
         }
+
     except Exception as e:
-        # In lỗi ra Terminal để debug nếu cần
-        print(f"Prophet Error Details: {e}")
+        print(f"AI Error: {e}")
         return None
 
-def plot_prophet_chart(symbol, prophet_result):
-    """Vẽ biểu đồ Tiên tri (Giữ nguyên giao diện đẹp)"""
-    if not prophet_result: return None
+def plot_ai_chart(symbol, ai_result):
+    """Vẽ biểu đồ AI (Cyberpunk Style)"""
+    if not ai_result: return None
     
-    fc = prophet_result['forecast_df']
-    
-    # Chỉ hiển thị 48h quá khứ + 12h tương lai cho gọn
-    display_len = 48 + 12 
-    fc_cut = fc.tail(display_len)
+    history = ai_result['history'].tail(48) # Lấy 48h quá khứ
+    forecast = ai_result['forecast_df']
     
     fig = go.Figure()
 
-    # 1. Đường Dự báo (Tím Neon)
+    # 1. Quá khứ (Xanh Neon)
     fig.add_trace(go.Scatter(
-        x=fc_cut['ds'], y=fc_cut['yhat'],
-        mode='lines',
-        name='AI Prediction',
-        line=dict(color='#bc13fe', width=3, dash='dot')
-    ))
-
-    # 2. Vùng Mây (Khoảng tin cậy)
-    fig.add_trace(go.Scatter(
-        x=fc_cut['ds'], y=fc_cut['yhat_upper'],
-        mode='lines', marker=dict(color="#444"),
-        line=dict(width=0), showlegend=False, hoverinfo='skip'
-    ))
-    fig.add_trace(go.Scatter(
-        x=fc_cut['ds'], y=fc_cut['yhat_lower'],
-        mode='lines', marker=dict(color="#444"),
-        line=dict(width=0), fill='tonexty',
-        fillcolor='rgba(188, 19, 254, 0.1)',
-        showlegend=False, hoverinfo='skip'
-    ))
-
-    # 3. Giá Thực tế (Xanh Cyan)
-    # Lấy data thật từ lịch sử model
-    history = prophet_result['model'].history
-    # Lọc lấy phần trùng với fc_cut để vẽ đè lên chuẩn xác
-    mask = history['ds'] >= fc_cut['ds'].min()
-    history_cut = history.loc[mask]
-    
-    fig.add_trace(go.Scatter(
-        x=history_cut['ds'], y=history_cut['y'],
-        mode='lines+markers',
-        name='Actual Price',
+        x=history['t'], y=history['close'],
+        mode='lines+markers', name='History',
         line=dict(color='#00f3ff', width=2),
         marker=dict(size=4)
     ))
 
-    # Trang trí
+    # 2. Tương lai (Tím Neon - Nét đứt)
+    fig.add_trace(go.Scatter(
+        x=forecast['ds'], y=forecast['yhat'],
+        mode='lines+markers', name='AI Forecast',
+        line=dict(color='#bc13fe', width=3, dash='dot'),
+        marker=dict(size=5, symbol='star')
+    ))
+
+    # Nối điểm cuối quá khứ với điểm đầu tương lai cho liền mạch
+    fig.add_trace(go.Scatter(
+        x=[history['t'].iloc[-1], forecast['ds'].iloc[0]],
+        y=[history['close'].iloc[-1], forecast['yhat'].iloc[0]],
+        mode='lines', showlegend=False,
+        line=dict(color='#bc13fe', width=3, dash='dot')
+    ))
+
     fig.update_layout(
         title=dict(
-            text=f"🔮 META PROPHET: {symbol} NEXT 12H FORECAST",
+            text=f"🧠 NEURAL AI: {symbol} NEXT 12H",
             font=dict(family="Orbitron", size=15, color="#bc13fe")
         ),
         template="plotly_dark",
@@ -122,11 +132,9 @@ def plot_prophet_chart(symbol, prophet_result):
         plot_bgcolor='rgba(0,0,0,0)',
         height=400,
         margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h", y=1, x=0, bgcolor='rgba(0,0,0,0)'),
+        legend=dict(orientation="h", y=1, x=0),
         hovermode="x unified"
     )
-    
-    # Ẩn lưới thừa
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)')
     
