@@ -11,7 +11,7 @@ from backend.logic import analyze_market
 st.set_page_config(layout="wide", page_title="CYBER COMMANDER V27", page_icon="🔮", initial_sidebar_state="expanded")
 st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
-# 2. POPUP CHART & DATA (ĐÃ SỬA LỖI HIỂN THỊ HTML)
+# 2. POPUP CHART & DATA (ĐÃ SỬA LỖI HTML)
 @st.dialog("TACTICAL VIEW", width="large")
 def show_popup_data(symbol):
     # Header
@@ -24,22 +24,19 @@ def show_popup_data(symbol):
         data = analyze_market(df)
         if data:
             # --- BƯỚC 1: CHUẨN BỊ SỐ LIỆU ---
-            # Màu sắc cơ bản
             c_signal = data['color']
             c_stoch = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
             
-            # Format giá tiền
             str_price = f"${data['price']:,.2f}"
             str_poc = f"${data['poc']:,.2f}"
             str_rsi = f"{data['rsi']:.1f}"
             str_stoch = f"{data['stoch_k']:.1f}"
             
-            # Battle Plan Vars
             str_entry = f"${data['price']:,.2f}"
             str_stop = f"${data['s1']*0.99:,.2f}"
             str_target = f"${data['r1']:,.2f}"
 
-            # --- BƯỚC 2: XỬ LÝ SMC (CÁ MẬP) ---
+            # --- BƯỚC 2: XỬ LÝ SMC ---
             smc_info = data.get('smc')
             if smc_info:
                 smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
@@ -48,22 +45,22 @@ def show_popup_data(symbol):
                 smc_text = "NO CLEAR ZONE"
                 smc_color = "#444"
 
-            # --- BƯỚC 3: HIỂN THỊ GIAO DIỆN ---
+            # --- BƯỚC 3: HIỂN THỊ (QUAN TRỌNG: unsafe_allow_html=True) ---
             
-            # Hàng 1: HUD Stats
+            # Hàng 1
             c1, c2, c3 = st.columns(3)
             with c1: st.markdown(f"""<div class="glass-card"><div class="metric-label">CURRENT PRICE</div><div class="metric-val">{str_price}</div></div>""", unsafe_allow_html=True)
             with c2: st.markdown(f"""<div class="glass-card" style="border-color:{c_signal}"><div class="metric-label" style="color:{c_signal}">AI SIGNAL</div><div class="metric-val" style="color:{c_signal}">{data['signal']}</div></div>""", unsafe_allow_html=True)
             with c3: st.markdown(f"""<div class="glass-card"><div class="metric-label">POINT OF CONTROL</div><div class="metric-val" style="color:#ff0055">{str_poc}</div></div>""", unsafe_allow_html=True)
             
-            # Hàng 2: Chart & Plan
+            # Hàng 2
             c_chart, c_plan = st.columns([2, 1])
             
             with c_chart:
                 render_chart(symbol, height=500)
                 
             with c_plan:
-                # 1. OSCILLATORS BOX (ĐÃ FIX)
+                # OSCILLATORS
                 st.markdown(f"""
                 <div class="glass-card">
                     <div class="metric-label">OSCILLATORS</div>
@@ -82,7 +79,7 @@ def show_popup_data(symbol):
                 </div>
                 """, unsafe_allow_html=True)
 
-                # 2. BATTLE PLAN BOX (ĐÃ CÓ SMC RADAR & FIX HTML)
+                # BATTLE PLAN (FIX LỖI TẠI ĐÂY)
                 st.markdown(f"""
                 <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
                     <div class="metric-label" style="color:var(--neon-cyan); margin-bottom:10px">>_ BATTLE PLAN</div>
@@ -105,7 +102,7 @@ def show_popup_data(symbol):
                         <strong>VOL:</strong> {data['vol_status']}
                     </div>
                 </div>
-                """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True) # <--- CHÌA KHÓA LÀ DÒNG NÀY
     else:
         st.error("DATA FEED LOST")
 
