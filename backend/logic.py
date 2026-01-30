@@ -3,21 +3,33 @@ import pandas_ta as ta
 
 def analyze_market(df):
     """
-    V42 ENGINE: DUAL STRATEGY (SWING + SCALP)
+    V46 FIX: BỔ SUNG TÍNH TOÁN BOLLINGER BANDS ĐỂ KHÔNG BỊ LỖI VẼ HÌNH
     """
     if df is None or df.empty: return None
     
-    # 1. CHỈ BÁO CƠ BẢN
+    # --- 1. TÍNH TOÁN CHỈ BÁO (QUAN TRỌNG: PHẢI CÓ ĐOẠN NÀY) ---
+    # Bollinger Bands (20, 2)
+    bb = df.ta.bbands(length=20, std=2)
+    # Gán vào DataFrame để Plot Engine dùng
+    # Lưu ý: pandas_ta trả về tên cột kiểu BBL_20_2.0, BBM_20_2.0, BBU_20_2.0
+    # Chúng ta đổi tên cho gọn để plot_engine dễ gọi
+    df['bb_upper'] = bb['BBU_20_2.0']
+    df['bb_lower'] = bb['BBL_20_2.0']
+    df['bb_mid'] = bb['BBM_20_2.0']
+
+    # RSI, Stoch, ADX, ATR (Giữ nguyên code cũ)
     df['rsi'] = df.ta.rsi(length=14)
     df['stoch_k'] = df.ta.stoch(k=14, d=3)['STOCHk_14_3_3']
     df['adx'] = df.ta.adx(length=14)['ADX_14']
     df['atr'] = df.ta.atr(length=14)
     
-    # EMA Trend
+    # EMA (Giữ nguyên)
     df['ema_34'] = df.ta.ema(length=34)
     df['ema_89'] = df.ta.ema(length=89)
     
+    # ... (Phần logic bên dưới giữ nguyên không đổi) ...
     last = df.iloc[-1]
+    # ...
     
     # Xác định Xu hướng
     if last['ema_34'] > last['ema_89']:
