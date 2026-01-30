@@ -201,35 +201,35 @@ elif mode == "🔮 DEEP SCANNER":
 
                 st.write("---")
                 
-                # NÚT KÍCH HOẠT TIÊN TRI (Bấm mới chạy cho nhẹ App)
-                st.markdown('<div class="glitch-header" style="font-size:20px; color:#bc13fe">🔮 AI PROPHET (META MODEL)</div>', unsafe_allow_html=True)
+                st.write("---")
                 
-                if st.button("RUN PREDICTION (NEXT 12H)"):
-                    with st.spinner("🤖 META AI IS THINKING... (This may take a few seconds)"):
-                        # Chạy tiên tri
-                        ai_res = run_prophet_forecast(df)
+                # NÚT KÍCH HOẠT AI (PHIÊN BẢN SCIKIT-LEARN)
+                st.markdown('<div class="glitch-header" style="font-size:20px; color:#bc13fe">🧠 CYBER AI CORE</div>', unsafe_allow_html=True)
+                
+                if st.button("RUN NEURAL PREDICTION"):
+                    with st.spinner("⚡ AI IS COMPUTING (RANDOM FOREST)..."):
+                        # Gọi hàm mới
+                        ai_res = run_ai_forecast(df)
                         
                         if ai_res:
-                            # Hiển thị kết quả
                             col_ai1, col_ai2 = st.columns([1, 3])
                             
                             with col_ai1:
-                                # Thẻ thông tin Dự báo
                                 diff_color = "#00ff9f" if ai_res['diff_pct'] > 0 else "#ff0055"
                                 st.markdown(f"""
                                 <div class="glass-card" style="border: 1px solid #bc13fe; text-align:center">
-                                    <div style="font-size:12px; color:#bc13fe; margin-bottom:5px">AI PREDICTION (12H)</div>
+                                    <div style="font-size:12px; color:#bc13fe; margin-bottom:5px">AI TARGET (12H)</div>
                                     <div style="font-family:'Orbitron'; font-size:24px; color:#fff">${ai_res['predicted_price']:,.2f}</div>
                                     <div style="font-family:'Share Tech Mono'; font-size:16px; color:{diff_color}; margin-top:5px">
                                         {ai_res['trend']} ({ai_res['diff_pct']:+.2f}%)
                                     </div>
-                                    <div style="font-size:10px; color:#666; margin-top:10px">Powered by Meta Prophet</div>
+                                    <div style="font-size:10px; color:#666; margin-top:10px">Model: Random Forest</div>
                                 </div>
                                 """, unsafe_allow_html=True)
                                 
                             with col_ai2:
-                                # Biểu đồ Dự báo
-                                fig_ai = plot_prophet_chart(symbol, ai_res)
+                                # Vẽ biểu đồ mới
+                                fig_ai = plot_ai_chart(symbol, ai_res)
                                 st.plotly_chart(fig_ai, use_container_width=True)
                         else:
-                            st.error("AI MODEL FAILED TO CONVERGE")
+                            st.error("NOT ENOUGH DATA FOR AI TRAINING")
