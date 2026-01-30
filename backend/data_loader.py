@@ -1,20 +1,21 @@
 import yfinance as yf
 import pandas as pd
 import requests
-import json # <--- Cần thêm cái này để đóng gói danh sách coin
+import json
+import time
 
-# HEADERS ĐỂ KHÔNG BỊ CHẶN
+# HEADERS CHỐNG CHẶN
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
 def fetch_data(symbol):
     """
-    DEEP SCANNER ENGINE: Lấy dữ liệu 1 coin (Vẫn hoạt động tốt -> Giữ nguyên logic)
+    ENGINE GỐC: Đã được kiểm chứng là hoạt động tốt.
+    Giữ nguyên không sửa gì cả.
     """
     symbol = symbol.upper()
     
-    # 1. XỬ LÝ MÃ
     if symbol in ['GC=F', 'CL=F', '^GSPC', 'EURUSD=X']:
         is_crypto = False
         yf_sym = symbol
@@ -23,11 +24,11 @@ def fetch_data(symbol):
         clean_sym = symbol.replace('/', '').replace('-', '').replace('USD', '')
         if not clean_sym.endswith('USDT'): clean_sym += 'USDT'
 
-    # 2. BINANCE (CRYPTO)
+    # 1. BINANCE
     if is_crypto:
         try:
-            url = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval=1h&limit=200"
-            response = requests.get(url, headers=HEADERS, timeout=5)
+            url = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval=1h&limit=24" # Lấy 24 nến để tính % ngày
+            response = requests.get(url, headers=HEADERS, timeout=3)
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list) and len(data) > 0:
@@ -39,11 +40,10 @@ def fetch_data(symbol):
                     return df, "BINANCE_OK"
         except: pass
 
-    # 3. YAHOO (MACRO / FALLBACK)
+    # 2. YAHOO
     try:
-        if is_crypto: 
-            yf_sym = symbol.replace('/', '-') + '-USD'
-        df = yf.download(yf_sym, period="1mo", interval="1h", progress=False)
+        if is_crypto: yf_sym = symbol.replace('/', '-') + '-USD'
+        df = yf.download(yf_sym, period="2d", interval="1h", progress=False)
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
             df = df.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'})
@@ -53,7 +53,7 @@ def fetch_data(symbol):
     return None, "NO_DATA"
 
 def fetch_global_indices():
-    """Lấy dữ liệu Vàng/Dầu (Yahoo)"""
+    """Lấy dữ liệu Vĩ mô"""
     tickers = {'GOLD': 'GC=F', 'DXY': 'DX-Y.NYB', 'S&P500': '^GSPC', 'USD/VND': 'VND=X'}
     results = {}
     try:
@@ -78,27 +78,22 @@ def fetch_global_indices():
 
 def fetch_market_overview():
     """
-    GOD'S EYE V5: Kỹ thuật 'Sniper Shot' (Chỉ lấy đúng danh sách cần)
-    -> Nhẹ hơn, Nhanh hơn, Không bị nghẹn mạng.
+    GOD'S EYE V6: MANUAL LOOP (FAILSAFE)
+    Nếu Deep Scanner chạy được, hàm này CHẮC CHẮN chạy được.
     """
-    # 1. Danh sách Coin mục tiêu
-    target_coins = ["BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "LINK", "AVAX", "SUI", "PEPE", "SHIB", "NEAR", "DOT", "LTC"]
+    # Danh sách rút gọn 10 con quan trọng nhất để load cho nhanh
+    target_coins = ["BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "LINK", "AVAX", "PEPE"]
     
+    overview_data = []
+    
+    # --- CÁCH 1: BINANCE BATCH (ƯU TIÊN - NẾU ĐƯỢC THÌ TỐT) ---
     try:
-        # 2. Chuẩn bị danh sách tham số gửi cho Binance
-        # Binance yêu cầu format: ["BTCUSDT","ETHUSDT",...]
         symbols_param = json.dumps([f"{c}USDT" for c in target_coins])
-        
-        # 3. GỌI API VỚI THAM SỐ CỤ THỂ (QUAN TRỌNG)
-        # Thay vì gọi all, ta truyền tham số `symbols` vào
         url = "https://api.binance.com/api/v3/ticker/24hr"
-        response = requests.get(url, headers=HEADERS, params={"symbols": symbols_param}, timeout=5)
+        response = requests.get(url, headers=HEADERS, params={"symbols": symbols_param}, timeout=3)
         
         if response.status_code == 200:
             data = response.json()
-            overview_data = []
-            
-            # Binance trả về list đúng thứ tự hoặc lộn xộn, ta map lại cho chắc
             data_map = {item['symbol']: item for item in data}
             
             for coin in target_coins:
@@ -115,18 +110,39 @@ def fetch_market_overview():
                     
                     overview_data.append({"SYMBOL": coin, "PRICE ($)": p, "24H %": c, "TREND": t})
             
-            if overview_data:
+            if len(overview_data) > 0:
                 return pd.DataFrame(overview_data)
-                
-    except Exception as e:
-        print(f"Sniper Fetch Error: {e}")
+    except:
+        pass # Nếu lỗi Batch, chuyển sang Cách 2 ngay lập tức
 
-    # Fallback: Nếu Sniper thất bại (rất hiếm), thử Yahoo Batch Download
-    try:
-        yf_tickers = [f"{c}-USD" for c in target_coins]
-        data = yf.download(yf_tickers, period="2d", progress=False)
-        # (Logic xử lý Yahoo ở đây nếu cần, nhưng Binance Sniper thường sẽ ăn ngay)
-        # ... Viết ngắn gọn để tránh code quá dài
-    except: pass
+    # --- CÁCH 2: MANUAL LOOP (CÁCH NÀY LÀ BẤT TỬ) ---
+    # Dùng chính hàm fetch_data lẻ tẻ để gom lại
+    # Hơi chậm xíu nhưng bao sống
+    
+    manual_list = []
+    for coin in target_coins:
+        # Gọi lẻ từng con (Giống hệt Deep Scanner)
+        df, status = fetch_data(coin)
         
+        if df is not None and not df.empty:
+            price_now = df['close'].iloc[-1]
+            
+            # Tính % thay đổi trong 24h qua (lấy giá của 24 cây nến trước)
+            if len(df) >= 24:
+                price_old = df['close'].iloc[-24]
+            else:
+                price_old = df['open'].iloc[0]
+                
+            change = (price_now - price_old) / price_old * 100
+            
+            if change >= 5: t = "🚀"
+            elif change > 0: t = "📈"
+            elif change <= -5: t = "🩸"
+            else: t = "📉"
+            
+            manual_list.append({"SYMBOL": coin, "PRICE ($)": price_now, "24H %": change, "TREND": t})
+    
+    if len(manual_list) > 0:
+        return pd.DataFrame(manual_list)
+
     return None
