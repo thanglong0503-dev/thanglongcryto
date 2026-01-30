@@ -285,3 +285,28 @@ elif mode == "🔮 DEEP SCANNER":
                                 st.plotly_chart(fig_ai, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
                         else:
                             st.error("AI ERROR: Could not aggregate data. Try refreshing.")
+# ==============================================================================
+# FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
+# ==============================================================================
+st.markdown("""
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.8); /* Màu đen trong suốt */
+    color: #888;
+    text-align: center;
+    padding: 8px;
+    font-family: 'Share Tech Mono'; 
+    font-size: 12px;
+    border-top: 1px solid #333;
+    z-index: 9999; /* Luôn nổi lên trên cùng */
+    backdrop-filter: blur(5px); /* Hiệu ứng mờ kính */
+}
+</style>
+<div class="footer">
+    🚀 CYBER COMMANDER V42  |  DEVELOPED BY <strong style="color:#00ff9f; font-family:'Orbitron'">THANGLONG</strong>  |  © 2026
+</div>
+""", unsafe_allow_html=True)
