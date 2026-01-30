@@ -1,3 +1,5 @@
+# Tìm chỗ các dòng import ở đầu file và thêm dòng này vào
+from backend.plot_engine import create_chart
 import streamlit as st
 import time
 # Tìm dòng cũ: from backend.ai_forecast import run_prophet_forecast, plot_prophet_chart
