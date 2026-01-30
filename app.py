@@ -152,19 +152,56 @@ if mode == "🌐 MARKET GRID":
             st.markdown("<div style='height:1px; background:#111; margin:0'></div>", unsafe_allow_html=True)
 
 # ==============================================================================
+# ... (Phần code trên giữ nguyên) ...
+
+# ==============================================================================
 # MODE 2: DEEP SCANNER
 # ==============================================================================
 elif mode == "🔮 DEEP SCANNER":
     st.markdown('<div class="glitch-header">DEEP SCANNER</div>', unsafe_allow_html=True)
+    
     col_search, col_pad = st.columns([1, 2])
     with col_search:
-        ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "PEPE", "SHIB", "WIF"]
-        selected_asset = st.selectbox("SELECT ASSET", ASSETS + ["...CUSTOM..."], label_visibility="collapsed")
-        symbol = st.text_input("TYPE SYMBOL", "BTC").upper() if selected_asset == "...CUSTOM..." else selected_asset
+        # --- DANH SÁCH COIN KHỔNG LỒ (ĐÃ ĐƯỢC PHÂN LOẠI) ---
+        HUGE_ASSETS = [
+            # 👑 TOP KINGS
+            "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOT", "LINK", "TRX", "TON",
+            # 🚀 MEME GODS
+            "DOGE", "SHIB", "PEPE", "WIF", "BONK", "FLOKI", "BOME", "MEME", "TURBO", "BRETT", "POPCAT", "NEIRO",
+            # 🤖 AI & DATA
+            "FET", "RNDR", "WLD", "NEAR", "TAO", "JASMY", "ARKM", "GRT", "THETA", "OCEAN", "AGIX",
+            # ⛓️ LAYER 1 & 2
+            "SUI", "APT", "ARB", "OP", "MATIC", "SEI", "INJ", "TIA", "KAS", "FTM", "ALGO", "ATOM", "HBAR", "ICP", "ETC", "LTC", "BCH",
+            # 🏦 DEFI & RWA
+            "UNI", "AAVE", "MKR", "LDO", "ONDO", "PENDLE", "JUP", "RUNE", "SNX", "CRV", "DYDX", "GMX",
+            # 🎮 GAME & METAVERSE
+            "IMX", "GALA", "SAND", "MANA", "AXS", "APE", "BEAM", "PIXEL", "XAI", "NOT"
+        ]
+        
+        # Sắp xếp theo bảng chữ cái cho dễ tìm (Trừ BTC, ETH, SOL ở đầu)
+        top_3 = ["BTC", "ETH", "SOL"]
+        others = sorted([x for x in HUGE_ASSETS if x not in top_3])
+        FINAL_LIST = top_3 + others
+
+        # Widget chọn (Có thể gõ phím để tìm kiếm trong list này)
+        selected_asset = st.selectbox(
+            "SELECT ASSET", 
+            FINAL_LIST + ["...CUSTOM..."], # Vẫn giữ Custom để nhập con lạ
+            label_visibility="collapsed"
+        )
+
+        # Logic xử lý nhập tay
+        if selected_asset == "...CUSTOM...":
+            symbol = st.text_input("TYPE SYMBOL (Ex: BTC)", "BTC").upper()
+        else:
+            symbol = selected_asset
 
     st.write("---")
+    
+    # ... (Phần logic tải dữ liệu và hiển thị bên dưới GIỮ NGUYÊN) ...
     with st.spinner(f"⚡ DECRYPTING {symbol}..."):
         df, status = fetch_data(symbol)
+        # ... (Code cũ của Ngài ở đoạn dưới này vẫn dùng tốt) ...
         if df is not None:
             data = analyze_market(df)
             if data:
