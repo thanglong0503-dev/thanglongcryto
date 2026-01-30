@@ -10,7 +10,8 @@ from backend.data_loader import fetch_data, fetch_global_indices, fetch_market_o
 from backend.logic import analyze_market
 
 # 1. CẤU HÌNH TRANG
-st.set_page_config(layout="wide", page_title="CYBER COMMANDER V35", page_icon="🔮", initial_sidebar_state="expanded")
+# Thay 🔮 bằng 💠
+st.set_page_config(layout="wide", page_title="CYBER COMMANDER V42", page_icon="💠", initial_sidebar_state="expanded")
 st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
 def create_battle_plan_html(data):
