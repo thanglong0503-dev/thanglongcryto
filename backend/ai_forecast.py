@@ -69,21 +69,25 @@ def run_ai_forecast(df, periods=6):
 
 def plot_ai_chart(symbol, ai_result):
     """
-    VẼ BIỂU ĐỒ BLUE CLOUD (GIỐNG STOCK DASHBOARD)
+    VẼ BIỂU ĐỒ INTERACTIVE (CÓ THỂ KÉO THẢ + ZOOM)
     """
     if not ai_result: return None
     
     fc = ai_result['forecast_df']
     orig = ai_result['original_data']
     
-    # Hiển thị khoảng 20 ngày quá khứ + tương lai
-    display_len = 120 + len(fc) - len(orig)
+    # Hiển thị mặc định: 200 nến quá khứ + tương lai (để nhìn cho thoáng)
+    # Ngài có thể zoom out để xem thêm
+    display_len = 200 + len(fc) - len(orig)
     fc_cut = fc.tail(display_len)
-    orig_cut = orig[orig['ds'] >= fc_cut['ds'].min()]
+    
+    # Lấy dữ liệu gốc tương ứng
+    min_date = fc_cut['ds'].min()
+    orig_cut = orig[orig['ds'] >= min_date]
 
     fig = go.Figure()
 
-    # 1. VÙNG MÂY (UNCERTAINTY) - QUAN TRỌNG ĐỂ NHÌN GIỐNG STOCK APP
+    # 1. VÙNG MÂY (UNCERTAINTY)
     fig.add_trace(go.Scatter(
         x=fc_cut['ds'], y=fc_cut['yhat_upper'],
         mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'
@@ -92,35 +96,43 @@ def plot_ai_chart(symbol, ai_result):
         x=fc_cut['ds'], y=fc_cut['yhat_lower'],
         mode='lines', line=dict(width=0),
         fill='tonexty',
-        fillcolor='rgba(0, 180, 255, 0.2)', # Xanh mây
+        fillcolor='rgba(0, 180, 255, 0.2)',
         showlegend=False, hoverinfo='skip'
     ))
 
-    # 2. ĐƯỜNG DỰ BÁO (TREND)
+    # 2. ĐƯỜNG DỰ BÁO (AI TREND)
     fig.add_trace(go.Scatter(
         x=fc_cut['ds'], y=fc_cut['yhat'],
-        mode='lines', name='AI Trend (H4)',
+        mode='lines', name='AI Trend',
         line=dict(color='#00b4ff', width=3)
     ))
 
-    # 3. CHẤM TRÒN DỮ LIỆU THỰC
+    # 3. DỮ LIỆU THỰC (CHẤM TRÒN)
     fig.add_trace(go.Scatter(
         x=orig_cut['ds'], y=orig_cut['y'],
-        mode='markers', name='Actual (H4)',
+        mode='markers', name='Actual',
         marker=dict(color='#00ffa3', size=5, line=dict(width=1, color='black'))
     ))
 
+    # --- CẤU HÌNH KÉO THẢ (QUAN TRỌNG) ---
     fig.update_layout(
-        title=dict(text=f"🔮 PROPHET H4 VISION: {symbol}", font=dict(family="Orbitron", size=15, color="#00b4ff")),
+        title=dict(text=f"🔮 PROPHET VISION: {symbol}", font=dict(family="Orbitron", size=15, color="#00b4ff")),
         template="plotly_dark",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        height=500,
+        height=550, # Cao hơn chút cho dễ nhìn
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h", y=1, x=0),
         hovermode="x unified",
-        xaxis=dict(type="date")
+        
+        # 🟢 CHÌA KHÓA CỦA KÉO THẢ LÀ ĐÂY:
+        dragmode='pan',  # Mặc định chuột là "Bàn tay" để nắm kéo
+        
+        xaxis=dict(
+            rangeslider=dict(visible=True, thickness=0.08), # Thanh trượt zoom bên dưới
+            type="date"
+        )
     )
-    fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', side="right")
+    fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', side="right") # Giá nằm bên phải
 
     return fig
