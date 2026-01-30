@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-
+from backend.ai_forecast import run_prophet_forecast, plot_prophet_chart # <--- MỚI
 # IMPORT MODULES
 from frontend.styles import get_cyberpunk_css
 from frontend.charts import render_chart
@@ -195,3 +195,39 @@ elif mode == "🔮 DEEP SCANNER":
                 with c_info:
                     st.markdown(create_oscillators_html(data), unsafe_allow_html=True)
                     st.markdown(create_battle_plan_html(data), unsafe_allow_html=True)
+# ... (Sau khi kết thúc with c_info của code cũ) ...
+
+                st.write("---")
+                
+                # NÚT KÍCH HOẠT TIÊN TRI (Bấm mới chạy cho nhẹ App)
+                st.markdown('<div class="glitch-header" style="font-size:20px; color:#bc13fe">🔮 AI PROPHET (META MODEL)</div>', unsafe_allow_html=True)
+                
+                if st.button("RUN PREDICTION (NEXT 12H)"):
+                    with st.spinner("🤖 META AI IS THINKING... (This may take a few seconds)"):
+                        # Chạy tiên tri
+                        ai_res = run_prophet_forecast(df)
+                        
+                        if ai_res:
+                            # Hiển thị kết quả
+                            col_ai1, col_ai2 = st.columns([1, 3])
+                            
+                            with col_ai1:
+                                # Thẻ thông tin Dự báo
+                                diff_color = "#00ff9f" if ai_res['diff_pct'] > 0 else "#ff0055"
+                                st.markdown(f"""
+                                <div class="glass-card" style="border: 1px solid #bc13fe; text-align:center">
+                                    <div style="font-size:12px; color:#bc13fe; margin-bottom:5px">AI PREDICTION (12H)</div>
+                                    <div style="font-family:'Orbitron'; font-size:24px; color:#fff">${ai_res['predicted_price']:,.2f}</div>
+                                    <div style="font-family:'Share Tech Mono'; font-size:16px; color:{diff_color}; margin-top:5px">
+                                        {ai_res['trend']} ({ai_res['diff_pct']:+.2f}%)
+                                    </div>
+                                    <div style="font-size:10px; color:#666; margin-top:10px">Powered by Meta Prophet</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                            with col_ai2:
+                                # Biểu đồ Dự báo
+                                fig_ai = plot_prophet_chart(symbol, ai_res)
+                                st.plotly_chart(fig_ai, use_container_width=True)
+                        else:
+                            st.error("AI MODEL FAILED TO CONVERGE")
