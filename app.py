@@ -11,7 +11,7 @@ from backend.logic import analyze_market
 st.set_page_config(layout="wide", page_title="CYBER COMMANDER V27", page_icon="🔮", initial_sidebar_state="expanded")
 st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
-# 2. POPUP CHART & DATA (ĐÃ SỬA LỖI TRIỆT ĐỂ)
+# 2. POPUP CHART & DATA (ĐÃ SỬA LỖI HIỂN THỊ HTML)
 @st.dialog("TACTICAL VIEW", width="large")
 def show_popup_data(symbol):
     # Header
@@ -23,27 +23,34 @@ def show_popup_data(symbol):
     if df is not None:
         data = analyze_market(df)
         if data:
-            # --- BƯỚC 1: CHUẨN BỊ BIẾN SỐ (ĐỂ TRÁNH LỖI HTML) ---
-            # Màu sắc
+            # --- BƯỚC 1: CHUẨN BỊ SỐ LIỆU ---
+            # Màu sắc cơ bản
             c_signal = data['color']
-            c_rsi = 'var(--neon-green)' if data['rsi'] < 30 else ('var(--neon-pink)' if data['rsi'] > 70 else '#fff')
             c_stoch = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
-            c_trend = 'var(--neon-green)' if data['trend'] == 'UPTREND' else 'var(--neon-pink)'
             
-            # Giá trị hiển thị (Format chuỗi trước)
+            # Format giá tiền
             str_price = f"${data['price']:,.2f}"
             str_poc = f"${data['poc']:,.2f}"
             str_rsi = f"{data['rsi']:.1f}"
             str_stoch = f"{data['stoch_k']:.1f}"
             
-            # Battle Plan Values
+            # Battle Plan Vars
             str_entry = f"${data['price']:,.2f}"
             str_stop = f"${data['s1']*0.99:,.2f}"
             str_target = f"${data['r1']:,.2f}"
 
-            # --- BƯỚC 2: HIỂN THỊ GIAO DIỆN ---
+            # --- BƯỚC 2: XỬ LÝ SMC (CÁ MẬP) ---
+            smc_info = data.get('smc')
+            if smc_info:
+                smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
+                smc_color = "#00ff9f" if "BULL" in smc_info['type'] else "#ff0055"
+            else:
+                smc_text = "NO CLEAR ZONE"
+                smc_color = "#444"
+
+            # --- BƯỚC 3: HIỂN THỊ GIAO DIỆN ---
             
-            # Hàng 1: HUD
+            # Hàng 1: HUD Stats
             c1, c2, c3 = st.columns(3)
             with c1: st.markdown(f"""<div class="glass-card"><div class="metric-label">CURRENT PRICE</div><div class="metric-val">{str_price}</div></div>""", unsafe_allow_html=True)
             with c2: st.markdown(f"""<div class="glass-card" style="border-color:{c_signal}"><div class="metric-label" style="color:{c_signal}">AI SIGNAL</div><div class="metric-val" style="color:{c_signal}">{data['signal']}</div></div>""", unsafe_allow_html=True)
@@ -56,69 +63,26 @@ def show_popup_data(symbol):
                 render_chart(symbol, height=500)
                 
             with c_plan:
-                # --- BƯỚC 1: CHUẨN BỊ SỐ LIỆU & MÀU SẮC (SMC) ---
-                smc_info = data.get('smc')
-                if smc_info:
-                    # Nếu tìm thấy dấu chân cá mập
-                    smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
-                    smc_color = "#00ff9f" if "BULL" in smc_info['type'] else "#ff0055"
-                else:
-                    # Nếu không thấy
-                    smc_text = "NO CLEAR ZONE"
-                    smc_color = "#444"
-
-                # Chuẩn bị các biến giá (Entry, Stop, Target)
-                str_entry = f"${data['price']:,.2f}"
-                str_stop = f"${data['s1']*0.99:,.2f}"
-                str_target = f"${data['r1']:,.2f}"
-                
-                # Màu Stoch
-                c_stoch = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
-
-                # --- BƯỚC 2: VẼ GIAO DIỆN BATTLE PLAN (QUAN TRỌNG: unsafe_allow_html=True) ---
+                # 1. OSCILLATORS BOX (ĐÃ FIX)
                 st.markdown(f"""
                 <div class="glass-card">
                     <div class="metric-label">OSCILLATORS</div>
-                    <div style="font-family:'Share Tech Mono'; color:#ccc; font-size:13px; margin-top:5px">
-                        <div style="display:flex; justify-content:space-between;"><span>RSI (14)</span><span>{data['rsi']:.1f}</span></div>
-                        <div style="display:flex; justify-content:space-between;"><span>Stoch K</span><span style="color:{c_stoch}">{data['stoch_k']:.1f}</span></div>
-                    </div>
-                </div>
-                
-                <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
-                    <div class="metric-label" style="color:var(--neon-cyan); margin-bottom:10px">>_ BATTLE PLAN</div>
-                    
-                    <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.6;">
-                        <div style="border:1px dashed {smc_color}; background:rgba(0,0,0,0.3); padding:8px; margin-bottom:12px; border-radius:4px; text-align:center">
-                            <div style="font-size:10px; color:{smc_color}; letter-spacing:1px; margin-bottom:4px">🦈 SMART MONEY ZONE</div>
-                            <strong style="color:#fff; font-size:14px">{smc_text}</strong>
+                    <div style="margin-top:10px; font-family:'Share Tech Mono'; color:#ccc; font-size:14px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span>RSI (14)</span> <span>{str_rsi}</span>
                         </div>
-                        
-                        <div style="font-size:11px; color:#666">ENTRY SETUP</div>
-                        🚀 <strong>ENTRY:</strong> <span style="color:#fff">{str_entry}</span><br>
-                        🛑 <strong>STOP:</strong> <span style="color:#ff0055">{str_stop}</span><br>
-                        💰 <strong>TARGET:</strong> <span style="color:#00ff9f">{str_target}</span>
-                        
-                        <hr style="border-color:#333; margin:8px 0">
-                        
-                        <div style="font-size:11px; color:#666">MARKET SCAN</div>
-                        <strong>ADX:</strong> {data['strength']}<br>
-                        <strong>VOL:</strong> {data['vol_status']}
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span>Stoch K</span> <span style="color:{c_stoch}">{str_stoch}</span>
+                        </div>
+                        <div style="height:1px; background:#333; margin:10px 0;"></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span>TREND</span> <span>{data['trend']}</span>
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                # --- PHẦN LOGIC SMC (Thêm đoạn này vào trước st.markdown) ---
-                smc_info = data.get('smc')
-                if smc_info:
-                    # Nếu tìm thấy dấu chân cá mập
-                    smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
-                    smc_color = "#00ff9f" if "BULL" in smc_info['type'] else "#ff0055"
-                else:
-                    # Nếu không thấy gì
-                    smc_text = "NO CLEAR ZONE"
-                    smc_color = "#444" # Màu xám tối
 
-                # --- PHẦN HIỂN THỊ (SMC RADAR + BATTLE PLAN) ---
+                # 2. BATTLE PLAN BOX (ĐÃ CÓ SMC RADAR & FIX HTML)
                 st.markdown(f"""
                 <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
                     <div class="metric-label" style="color:var(--neon-cyan); margin-bottom:10px">>_ BATTLE PLAN</div>
@@ -126,7 +90,7 @@ def show_popup_data(symbol):
                     <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.6;">
                         <div style="border:1px dashed {smc_color}; background:rgba(0,0,0,0.3); padding:8px; margin-bottom:12px; border-radius:4px; text-align:center">
                             <div style="font-size:10px; color:{smc_color}; letter-spacing:1px; margin-bottom:4px">🦈 SMART MONEY ZONE</div>
-                            <strong style="color:#fff; font-size:14px">{smc_text}</strong>
+                            <strong style="color:#fff; font-size:13px">{smc_text}</strong>
                         </div>
                         
                         <div style="font-size:11px; color:#666">ENTRY SETUP</div>
@@ -142,6 +106,8 @@ def show_popup_data(symbol):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+    else:
+        st.error("DATA FEED LOST")
 
 # 3. SIDEBAR
 with st.sidebar:
