@@ -114,24 +114,26 @@ with st.sidebar:
             """, unsafe_allow_html=True)
 
 # ==============================================================================
+# ==============================================================================
 # MODE 1: MARKET GRID
 # ==============================================================================
 if mode == "🌐 MARKET GRID":
     st.markdown('<div class="glitch-header">GLOBAL MARKET MONITOR</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([6, 1])
-    with c1: st.caption("LIVE FEED | CLICK 'SCAN' FOR BATTLE PLAN")
+    with c1: st.caption("TOP 20 MARKET CAP | CLICK 'SCAN' FOR BATTLE PLAN")
     with c2: 
         if st.button("🔄 REFRESH"): st.rerun()
 
     df = fetch_market_overview()
     if df is not None:
+        # Cập nhật Header thêm cột CAP và VOL
         st.markdown("""
         <div style="display:flex; padding:10px; background:#000; border-bottom:1px solid #333; color:#666; font-family:'Share Tech Mono'; font-size:12px">
-            <div style="width:15%">ASSET</div>
-            <div style="width:25%; text-align:right">PRICE</div>
-            <div style="width:20%; text-align:right">24H %</div>
-            <div style="width:15%; text-align:center">TREND</div>
-            <div style="width:25%; text-align:right">PROTOCOL</div>
+            <div style="width:10%">ASSET</div>
+            <div style="width:20%; text-align:right">PRICE</div>
+            <div style="width:15%; text-align:right">24H %</div>
+            <div style="width:15%; text-align:right">VOL (24H)</div>  <div style="width:15%; text-align:right">M.CAP</div>      <div style="width:10%; text-align:center">TREND</div>
+            <div style="width:15%; text-align:right">ACTION</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -140,15 +142,26 @@ if mode == "🌐 MARKET GRID":
             price = row['PRICE ($)']
             change = row['24H %']
             trend = row['TREND']
+            vol = row.get('VOL', '---') # Lấy giá trị Volume
+            cap = row.get('CAP', '---') # Lấy giá trị Cap
+            
             color = "#00ffa3" if change >= 0 else "#ff0055"
             
-            c_asset, c_price, c_change, c_trend, c_btn = st.columns([1.5, 2.5, 2.0, 1.5, 2.5])
+            # Chia lại tỷ lệ cột (Layout 7 cột)
+            c_asset, c_price, c_change, c_vol, c_cap, c_trend, c_btn = st.columns([1.0, 2.0, 1.5, 1.5, 1.5, 1.0, 1.5])
+            
             with c_asset: st.markdown(f"<div style='font-family:Orbitron; font-weight:bold; color:#fff; padding-top:12px'>{sym}</div>", unsafe_allow_html=True)
             with c_price: st.markdown(f"<div style='font-family:Share Tech Mono; text-align:right; font-size:16px; color:#e0e0e0; padding-top:12px'>${price:,.4f}</div>", unsafe_allow_html=True)
             with c_change: st.markdown(f"<div style='font-family:Share Tech Mono; text-align:right; color:{color}; padding-top:12px'>{change:+.2f}%</div>", unsafe_allow_html=True)
+            
+            # --- HIỂN THỊ CỘT MỚI ---
+            with c_vol: st.markdown(f"<div style='font-family:Share Tech Mono; text-align:right; color:#888; padding-top:12px; font-size:14px'>{vol}</div>", unsafe_allow_html=True)
+            with c_cap: st.markdown(f"<div style='font-family:Share Tech Mono; text-align:right; color:#aaa; padding-top:12px; font-size:14px'>{cap}</div>", unsafe_allow_html=True)
+            
             with c_trend: st.markdown(f"<div style='text-align:center; font-size:18px; padding-top:8px'>{trend}</div>", unsafe_allow_html=True)
             with c_btn:
                 if st.button(f"⚡ SCAN", key=f"btn_{sym}"): show_popup_data(sym)
+            
             st.markdown("<div style='height:1px; background:#111; margin:0'></div>", unsafe_allow_html=True)
 
 # ==============================================================================
