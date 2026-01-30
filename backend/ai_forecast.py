@@ -1,138 +1,99 @@
 import pandas as pd
 from prophet import Prophet
 import plotly.graph_objects as go
-import logging
+from datetime import datetime, timedelta
 
-# Tắt log rác
-logging.getLogger('prophet').setLevel(logging.WARNING)
-logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
-
-def run_ai_forecast(df, periods=6):
+def prophet_forecast(df, days_ahead):
     """
-    V40 ENGINE: Gộp nến H4 để AI bắt trend tốt hơn + Tăng độ nhạy
-    periods = số lượng nến H4 tương lai (VD: 6 nến H4 = 24 giờ)
+    V46 AI ENGINE: DỰ BÁO TƯƠNG LAI BẰNG PROPHET
+    Hàm này tên là 'prophet_forecast' để khớp với app.py
     """
-    try:
-        # 1. CHUẨN BỊ DỮ LIỆU
-        data = df.copy().reset_index()
-        
-        # Đổi tên cột chuẩn
-        time_col = data.columns[0]
-        data.rename(columns={time_col: 'ds', 'close': 'y'}, inplace=True)
-        
-        # Xóa múi giờ
-        if data['ds'].dt.tz is not None:
-            data['ds'] = data['ds'].dt.tz_localize(None)
+    if df is None or len(df) < 50:
+        return go.Figure(), "⚠️ NOT ENOUGH DATA FOR AI PREDICTION"
 
-        # === 🔑 KỸ THUẬT GỘP NẾN (RESAMPLING) ===
-        # Chuyển từ H1 -> H4 (4 Giờ 1 nến)
-        # Giúp AI nhìn được bức tranh tổng thể, đỡ bị nhiễu, vẽ đẹp hơn
-        data.set_index('ds', inplace=True)
-        df_resampled = data['y'].resample('4H').last().dropna().reset_index()
-        
-        # Lấy dữ liệu train (Vẫn lấy 300 nến, nhưng giờ là 300 nến H4 = 50 ngày)
-        # -> Đủ dài để thấy trend tuần!
-        train_data = df_resampled.tail(300).copy()
-
-        # 2. CẤU HÌNH PROPHET (AGGRESSIVE MODE)
-        m = Prophet(
-            daily_seasonality=True,
-            weekly_seasonality=True, # BẬT LẠI ĐƯỢC VÌ DỮ LIỆU ĐÃ ĐỦ DÀI
-            yearly_seasonality=False,
-            changepoint_prior_scale=0.5, # TĂNG ĐỘ NHẠY (Mặc định 0.05 -> Giờ là 0.5) -> Hết bị đi ngang
-            seasonality_mode='multiplicative' # Chế độ nhân (biến động mạnh theo giá)
-        )
-        m.fit(train_data)
-        
-        # 3. DỰ BÁO
-        future = m.make_future_dataframe(periods=periods, freq='4H') # Dự báo theo khung H4
-        forecast = m.predict(future)
-        
-        # 4. KẾT QUẢ
-        future_forecast = forecast.tail(periods)
-        predicted_price = future_forecast.iloc[-1]['yhat']
-        current_price = train_data.iloc[-1]['y']
-        
-        diff_pct = ((predicted_price - current_price) / current_price) * 100
-        
-        return {
-            "forecast_df": forecast,
-            "original_data": train_data, # Dữ liệu H4
-            "predicted_price": predicted_price,
-            "trend": "BULLISH 🚀" if diff_pct > 0 else "BEARISH 🩸",
-            "diff_pct": diff_pct
-        }
-
-    except Exception as e:
-        print(f"Prophet Error: {e}")
-        return None
-
-def plot_ai_chart(symbol, ai_result):
-    """
-    VẼ BIỂU ĐỒ INTERACTIVE (CÓ THỂ KÉO THẢ + ZOOM)
-    """
-    if not ai_result: return None
+    # 1. CHUẨN BỊ DỮ LIỆU CHO PROPHET (Cần cột 'ds' và 'y')
+    # Resample về H4 (4 giờ) để giảm nhiễu và dự báo mượt hơn
+    data = df.resample('4h').agg({'open':'first', 'high':'max', 'low':'min', 'close':'last'}).dropna()
     
-    fc = ai_result['forecast_df']
-    orig = ai_result['original_data']
+    # Reset index để lấy cột thời gian
+    prophet_df = data.reset_index()[['t', 'close']]
+    prophet_df.columns = ['ds', 'y'] # Prophet bắt buộc phải đặt tên cột là 'ds' và 'y'
     
-    # Hiển thị mặc định: 200 nến quá khứ + tương lai (để nhìn cho thoáng)
-    # Ngài có thể zoom out để xem thêm
-    display_len = 200 + len(fc) - len(orig)
-    fc_cut = fc.tail(display_len)
-    
-    # Lấy dữ liệu gốc tương ứng
-    min_date = fc_cut['ds'].min()
-    orig_cut = orig[orig['ds'] >= min_date]
+    # Xóa múi giờ (timezone) nếu có để tránh lỗi Prophet
+    prophet_df['ds'] = prophet_df['ds'].dt.tz_localize(None)
 
+    # 2. TRAINING MODEL
+    # Changepoint prior scale: Độ nhạy với biến động (0.05 - 0.5)
+    m = Prophet(daily_seasonality=True, yearly_seasonality=False, changepoint_prior_scale=0.1)
+    m.fit(prophet_df)
+
+    # 3. DỰ BÁO (FUTURE)
+    # days_ahead là số ngày (vd: 1, 3, 7). Đổi ra số nến H4 (1 ngày = 6 nến H4)
+    periods = days_ahead * 6 
+    future = m.make_future_dataframe(periods=periods, freq='4h')
+    forecast = m.predict(future)
+
+    # 4. TÍNH TOÁN KẾT QUẢ
+    current_price = df['close'].iloc[-1]
+    predicted_price = forecast['yhat'].iloc[-1]
+    diff = predicted_price - current_price
+    diff_pct = (diff / current_price) * 100
+    
+    if diff_pct > 0:
+        trend = "BULLISH 🚀"
+        color = "#00ff9f"
+    else:
+        trend = "BEARISH 🩸"
+        color = "#ff0055"
+
+    text_result = f"""
+    ### 🔮 AI PREDICTION ({days_ahead} DAYS)
+    - **Current Price:** ${current_price:,.2f}
+    - **Target Price:** ${predicted_price:,.2f}
+    - **Trend:** {trend} ({diff_pct:+.2f}%)
+    """
+
+    # 5. VẼ BIỂU ĐỒ (VISUALIZATION)
     fig = go.Figure()
 
-    # 1. VÙNG MÂY (UNCERTAINTY)
+    # A. Dữ liệu thực tế (Đường màu xám)
     fig.add_trace(go.Scatter(
-        x=fc_cut['ds'], y=fc_cut['yhat_upper'],
-        mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'
-    ))
-    fig.add_trace(go.Scatter(
-        x=fc_cut['ds'], y=fc_cut['yhat_lower'],
-        mode='lines', line=dict(width=0),
-        fill='tonexty',
-        fillcolor='rgba(0, 180, 255, 0.2)',
-        showlegend=False, hoverinfo='skip'
+        x=prophet_df['ds'], y=prophet_df['y'],
+        mode='lines', name='Actual Price',
+        line=dict(color='rgba(255, 255, 255, 0.3)', width=1)
     ))
 
-    # 2. ĐƯỜNG DỰ BÁO (AI TREND)
+    # B. Dữ liệu dự báo (Đường màu Cyan sáng)
+    # Chỉ lấy phần dự báo tương lai
+    future_forecast = forecast.tail(periods)
+    
     fig.add_trace(go.Scatter(
-        x=fc_cut['ds'], y=fc_cut['yhat'],
-        mode='lines', name='AI Trend',
-        line=dict(color='#00b4ff', width=3)
+        x=future_forecast['ds'], y=future_forecast['yhat'],
+        mode='lines+markers', name='AI Prediction',
+        line=dict(color='#00b4ff', width=2),
+        marker=dict(size=3, color='#00b4ff')
     ))
 
-    # 3. DỮ LIỆU THỰC (CHẤM TRÒN)
+    # C. Dải tin cậy (Confidence Interval - Vùng mờ bao quanh)
     fig.add_trace(go.Scatter(
-        x=orig_cut['ds'], y=orig_cut['y'],
-        mode='markers', name='Actual',
-        marker=dict(color='#00ffa3', size=5, line=dict(width=1, color='black'))
+        x=pd.concat([future_forecast['ds'], future_forecast['ds'][::-1]]),
+        y=pd.concat([future_forecast['yhat_upper'], future_forecast['yhat_lower'][::-1]]),
+        fill='toself',
+        fillcolor='rgba(0, 180, 255, 0.1)',
+        line=dict(color='rgba(255,255,255,0)'),
+        hoverinfo="skip",
+        showlegend=False
     ))
 
-    # --- CẤU HÌNH KÉO THẢ (QUAN TRỌNG) ---
+    # D. Trang trí
     fig.update_layout(
-        title=dict(text=f"🔮 PROPHET VISION: {symbol}", font=dict(family="Orbitron", size=15, color="#00b4ff")),
         template="plotly_dark",
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        height=550, # Cao hơn chút cho dễ nhìn
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h", y=1, x=0),
-        hovermode="x unified",
-        
-        # 🟢 CHÌA KHÓA CỦA KÉO THẢ LÀ ĐÂY:
-        dragmode='pan',  # Mặc định chuột là "Bàn tay" để nắm kéo
-        
-        xaxis=dict(
-            rangeslider=dict(visible=True, thickness=0.08), # Thanh trượt zoom bên dưới
-            type="date"
-        )
+        plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
+        height=400,
+        margin=dict(l=10, r=10, t=30, b=10),
+        title=dict(text=f"PROPHET VISION: {trend}", font=dict(color=color)),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
     )
-    fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', side="right") # Giá nằm bên phải
 
-    return fig
+    return fig, text_result
