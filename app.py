@@ -126,7 +126,7 @@ def show_popup_data(symbol):
 # 3. SIDEBAR
 with st.sidebar:
     st.markdown('<div class="glitch-header" style="font-size:24px; margin-bottom:20px">CYBER<br>ORACLE</div>', unsafe_allow_html=True)
-    mode = st.radio("SYSTEM MODE", ["🌐 MARKET GRID", "🔮 DEEP SCANNER"], label_visibility="collapsed")
+    mode = st.radio("SYSTEM MODE", ["🌐 MARKET GRID", "💠 DEEP SCANNER"], label_visibility="collapsed")
     st.markdown("---")
     st.caption("MACRO DATA STREAM")
     macro = fetch_global_indices()
