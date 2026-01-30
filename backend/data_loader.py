@@ -4,30 +4,24 @@ import requests
 import json
 import time
 
-# HEADERS CHỐNG CHẶN
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
 def fetch_data(symbol):
-    """
-    ENGINE GỐC: Đã được kiểm chứng là hoạt động tốt.
-    Giữ nguyên không sửa gì cả.
-    """
+    """ENGINE GỐC: Giữ nguyên để phục vụ Deep Scanner"""
     symbol = symbol.upper()
     
     if symbol in ['GC=F', 'CL=F', '^GSPC', 'EURUSD=X']:
-        is_crypto = False
-        yf_sym = symbol
+        is_crypto = False; yf_sym = symbol
     else:
         is_crypto = True
         clean_sym = symbol.replace('/', '').replace('-', '').replace('USD', '')
         if not clean_sym.endswith('USDT'): clean_sym += 'USDT'
 
-    # 1. BINANCE
     if is_crypto:
         try:
-            url = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval=1h&limit=24" # Lấy 24 nến để tính % ngày
+            url = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval=1h&limit=24"
             response = requests.get(url, headers=HEADERS, timeout=3)
             if response.status_code == 200:
                 data = response.json()
@@ -40,7 +34,6 @@ def fetch_data(symbol):
                     return df, "BINANCE_OK"
         except: pass
 
-    # 2. YAHOO
     try:
         if is_crypto: yf_sym = symbol.replace('/', '-') + '-USD'
         df = yf.download(yf_sym, period="2d", interval="1h", progress=False)
@@ -49,11 +42,10 @@ def fetch_data(symbol):
             df = df.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'})
             return df, "YAHOO_OK"
     except: pass
-
     return None, "NO_DATA"
 
 def fetch_global_indices():
-    """Lấy dữ liệu Vĩ mô"""
+    """Giữ nguyên hàm lấy Vĩ mô"""
     tickers = {'GOLD': 'GC=F', 'DXY': 'DX-Y.NYB', 'S&P500': '^GSPC', 'USD/VND': 'VND=X'}
     results = {}
     try:
@@ -65,8 +57,7 @@ def fetch_global_indices():
                 if ticker in closes:
                     s = closes[ticker].dropna()
                     if len(s) >= 2:
-                        val = s.iloc[-1]
-                        prev = s.iloc[-2]
+                        val = s.iloc[-1]; prev = s.iloc[-2]
                         change = (val - prev) / prev * 100
                         fmt = f"{val:,.0f}" if name == 'USD/VND' else f"{val:,.2f}"
                         results[name] = {"price": fmt, "change": change}
@@ -78,71 +69,84 @@ def fetch_global_indices():
 
 def fetch_market_overview():
     """
-    GOD'S EYE V6: MANUAL LOOP (FAILSAFE)
-    Nếu Deep Scanner chạy được, hàm này CHẮC CHẮN chạy được.
+    GOD'S EYE V7: COINGECKO TOP 20 MARKET CAP
+    Lấy dữ liệu Top 20 Vốn hóa + Volume chuẩn chỉ.
     """
-    # Danh sách rút gọn 10 con quan trọng nhất để load cho nhanh
-    target_coins = ["BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "LINK", "AVAX", "PEPE"]
-    
-    overview_data = []
-    
-    # --- CÁCH 1: BINANCE BATCH (ƯU TIÊN - NẾU ĐƯỢC THÌ TỐT) ---
     try:
-        symbols_param = json.dumps([f"{c}USDT" for c in target_coins])
-        url = "https://api.binance.com/api/v3/ticker/24hr"
-        response = requests.get(url, headers=HEADERS, params={"symbols": symbols_param}, timeout=3)
+        # Gọi API CoinGecko lấy Top 20 theo Market Cap
+        url = "https://api.coingecko.com/api/v3/coins/markets"
+        params = {
+            "vs_currency": "usd",
+            "order": "market_cap_desc",
+            "per_page": 20,
+            "page": 1,
+            "sparkline": "false"
+        }
+        
+        response = requests.get(url, headers=HEADERS, params=params, timeout=5)
         
         if response.status_code == 200:
             data = response.json()
-            data_map = {item['symbol']: item for item in data}
+            overview_data = []
             
-            for coin in target_coins:
-                pair = f"{coin}USDT"
-                if pair in data_map:
-                    item = data_map[pair]
-                    p = float(item['lastPrice'])
-                    c = float(item['priceChangePercent'])
-                    
-                    if c >= 5: t = "🚀"
-                    elif c > 0: t = "📈"
-                    elif c <= -5: t = "🩸"
-                    else: t = "📉"
-                    
-                    overview_data.append({"SYMBOL": coin, "PRICE ($)": p, "24H %": c, "TREND": t})
-            
-            if len(overview_data) > 0:
-                return pd.DataFrame(overview_data)
-    except:
-        pass # Nếu lỗi Batch, chuyển sang Cách 2 ngay lập tức
+            for item in data:
+                # Xử lý Trend icon
+                c = item.get('price_change_percentage_24h', 0)
+                if c is None: c = 0
+                if c >= 5: t = "🚀"
+                elif c > 0: t = "📈"
+                elif c <= -5: t = "🩸"
+                else: t = "📉"
 
-    # --- CÁCH 2: MANUAL LOOP (CÁCH NÀY LÀ BẤT TỬ) ---
-    # Dùng chính hàm fetch_data lẻ tẻ để gom lại
-    # Hơi chậm xíu nhưng bao sống
-    
-    manual_list = []
-    for coin in target_coins:
-        # Gọi lẻ từng con (Giống hệt Deep Scanner)
-        df, status = fetch_data(coin)
-        
-        if df is not None and not df.empty:
-            price_now = df['close'].iloc[-1]
-            
-            # Tính % thay đổi trong 24h qua (lấy giá của 24 cây nến trước)
-            if len(df) >= 24:
-                price_old = df['close'].iloc[-24]
-            else:
-                price_old = df['open'].iloc[0]
+                # Format số lớn (Billion/Million) cho gọn
+                mcap = item.get('market_cap', 0)
+                vol = item.get('total_volume', 0)
                 
-            change = (price_now - price_old) / price_old * 100
-            
-            if change >= 5: t = "🚀"
-            elif change > 0: t = "📈"
-            elif change <= -5: t = "🩸"
-            else: t = "📉"
-            
-            manual_list.append({"SYMBOL": coin, "PRICE ($)": price_now, "24H %": change, "TREND": t})
-    
-    if len(manual_list) > 0:
-        return pd.DataFrame(manual_list)
+                # Hàm làm gọn số (Ví dụ: 1,000,000,000 -> 1.0B)
+                def format_large(n):
+                    if n >= 1e9: return f"${n/1e9:.1f}B"
+                    if n >= 1e6: return f"${n/1e6:.1f}M"
+                    return f"${n:,.0f}"
 
+                overview_data.append({
+                    "SYMBOL": item['symbol'].upper(),
+                    "PRICE ($)": item['current_price'],
+                    "24H %": c,
+                    "TREND": t,
+                    "VOL": format_large(vol),       # Thêm Volume
+                    "CAP": format_large(mcap)       # Thêm Market Cap
+                })
+            
+            return pd.DataFrame(overview_data)
+            
+    except Exception as e:
+        print(f"CoinGecko Error: {e}")
+        
+    # --- FALLBACK: NẾU COINGECKO LỖI THÌ DÙNG LẠI MANUAL LOOP BINANCE ---
+    # (Để đảm bảo không bao giờ trắng bảng)
+    target_fallback = ["BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "LINK", "AVAX", "PEPE"]
+    fallback_list = []
+    
+    for coin in target_fallback:
+        df, s = fetch_data(coin)
+        if df is not None and not df.empty:
+            p_now = df['close'].iloc[-1]
+            p_old = df['close'].iloc[-24] if len(df)>=24 else df['open'].iloc[0]
+            change = (p_now - p_old)/p_old*100
+            
+            # Tính Volume 24h (Tương đối)
+            vol_24h = (df['close'] * df['volume']).sum()
+            def fmt_vol(n):
+                if n >= 1e9: return f"${n/1e9:.1f}B"
+                if n >= 1e6: return f"${n/1e6:.1f}M"
+                return f"${n:,.0f}"
+
+            fallback_list.append({
+                "SYMBOL": coin, "PRICE ($)": p_now, "24H %": change, 
+                "TREND": "📈" if change>0 else "📉",
+                "VOL": fmt_vol(vol_24h),
+                "CAP": "---" # Binance không có Cap
+            })
+            
+    if fallback_list: return pd.DataFrame(fallback_list)
     return None
