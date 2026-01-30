@@ -15,52 +15,57 @@ st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
 def create_battle_plan_html(data):
     """
-    V41 FIX: HTML FLAT VERSION (Xóa thụt dòng để tránh lỗi hiển thị Code Block)
+    V42 HTML: HIỂN THỊ 2 CHIẾN THUẬT (SWING & SCALP)
     """
-    # Format giá tiền
-    str_entry = f"${data['entry_low']:,.0f} - ${data['entry_high']:,.0f}"
-    str_stop = f"${data['stop_loss']:,.2f}"
-    str_target = f"${data['take_profit']:,.2f}"
+    # --- 1. CHUẨN BỊ SỐ LIỆU SWING ---
+    sw_entry = f"${data['swing_entry_low']:,.0f} - ${data['swing_entry_high']:,.0f}"
+    sw_stop = f"${data['swing_sl']:,.2f}"
+    sw_target = f"${data['swing_tp']:,.2f}"
     
-    # Màu sắc
-    c_entry = "#fff"
-    c_stop = "#ff0055"
-    c_target = "#00ff9f"
-    
-    # Tính rủi ro
     try:
-        risk_pct = abs((data['entry_high'] - data['stop_loss']) / data['entry_high'] * 100)
-        reward_pct = abs((data['take_profit'] - data['entry_high']) / data['entry_high'] * 100)
-    except:
-        risk_pct = 0
-        reward_pct = 0
+        sw_risk = abs((data['swing_entry_high'] - data['swing_sl']) / data['swing_entry_high'] * 100)
+        sw_reward = abs((data['swing_tp'] - data['swing_entry_high']) / data['swing_entry_high'] * 100)
+    except: sw_risk = sw_reward = 0
 
-    # HTML (VIẾT SÁT LỀ TRÁI, KHÔNG THỤT DÒNG)
+    # --- 2. CHUẨN BỊ SỐ LIỆU SCALP ---
+    sc_entry = f"${data['scalp_entry']:,.2f}"
+    sc_stop = f"${data['scalp_sl']:,.2f}"
+    sc_target = f"${data['scalp_tp']:,.2f}"
+    
+    # Màu sắc riêng cho Scalp (Vàng Neon cho nổi)
+    c_scalp = "#fcee0a" 
+
+    # --- 3. HTML CODE (VIẾT PHẲNG - KHÔNG THỤT DÒNG ĐỂ TRÁNH LỖI) ---
     return f"""
 <div class="glass-card" style="border-left: 3px solid {data['color']};">
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-<div class="metric-label" style="color:{data['color']}">{data['signal']} SWING SETUP</div>
-<div style="font-size:10px; background:#333; padding:2px 6px; border-radius:4px; color:#ccc">R:R {data['risk_reward']}</div>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px">
+<div class="metric-label" style="color:{data['color']}">🌊 SWING SETUP (DÀI HẠN)</div>
+<div style="font-size:9px; background:#333; padding:2px 5px; border-radius:3px;">R:R 1:3</div>
 </div>
-<div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.8;">
-<div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px; margin-bottom:8px">
-<div style="font-size:10px; color:#888">🎯 ENTRY ZONE (LIMIT)</div>
-<strong style="color:{c_entry}; font-size:14px">{str_entry}</strong>
+<div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; margin-bottom:15px">
+<div style="background:rgba(255,255,255,0.05); padding:5px; border-radius:4px; margin-bottom:5px">
+<div style="font-size:9px; color:#888">ENTRY ZONE (LIMIT)</div>
+<strong style="color:#fff">{sw_entry}</strong>
 </div>
 <div style="display:flex; justify-content:space-between;">
-<div>
-<div style="font-size:10px; color:#888">🛑 STOP LOSS (-{risk_pct:.1f}%)</div>
-<span style="color:{c_stop}; font-weight:bold">{str_stop}</span>
-</div>
-<div style="text-align:right">
-<div style="font-size:10px; color:#888">💰 TARGET (+{reward_pct:.1f}%)</div>
-<span style="color:{c_target}; font-weight:bold">{str_target}</span>
+<div><span style="color:#ff0055">SL: {sw_stop}</span> <span style="font-size:9px; color:#666">(-{sw_risk:.1f}%)</span></div>
+<div><span style="color:#00ff9f">TP: {sw_target}</span> <span style="font-size:9px; color:#666">(+{sw_reward:.1f}%)</span></div>
 </div>
 </div>
-<hr style="border-color:#333; margin:10px 0">
-<div style="font-size:11px; color:#666; font-style:italic">
-*Chiến thuật: Swing (Săn sóng dài).<br>
-SL được nới rộng theo ATR để tránh quét râu.
+<hr style="border-color:#444; border-style:dashed; margin:10px 0">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px">
+<div class="metric-label" style="color:{c_scalp}">⚡ SCALP SETUP (TRONG NGÀY)</div>
+<div style="font-size:9px; background:#333; padding:2px 5px; border-radius:3px; color:{c_scalp}">R:R 1:1.5</div>
+</div>
+<div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb;">
+<div style="display:flex; justify-content:space-between; margin-bottom:4px">
+<span>ENTRY (MARKET):</span> <span style="color:#fff">{sc_entry}</span>
+</div>
+<div style="display:flex; justify-content:space-between; margin-bottom:4px">
+<span>STOP LOSS:</span> <span style="color:#ff0055">{sc_stop}</span>
+</div>
+<div style="display:flex; justify-content:space-between;">
+<span>TAKE PROFIT:</span> <span style="color:#00ff9f">{sc_target}</span>
 </div>
 </div>
 </div>
