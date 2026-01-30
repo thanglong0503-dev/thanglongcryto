@@ -15,7 +15,7 @@ st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
 def create_battle_plan_html(data):
     """
-    V41 HTML: HIỂN THỊ CHIẾN LƯỢC SWING (ZONE ENTRY)
+    V41 FIX: HTML FLAT VERSION (Xóa thụt dòng để tránh lỗi hiển thị Code Block)
     """
     # Format giá tiền
     str_entry = f"${data['entry_low']:,.0f} - ${data['entry_high']:,.0f}"
@@ -24,47 +24,47 @@ def create_battle_plan_html(data):
     
     # Màu sắc
     c_entry = "#fff"
-    c_stop = "#ff0055" # Đỏ neon
-    c_target = "#00ff9f" # Xanh neon
+    c_stop = "#ff0055"
+    c_target = "#00ff9f"
     
-    # Tính rủi ro (Risk) để hiển thị cho Ngài biết sẽ mất bao nhiêu %
-    risk_pct = abs((data['entry_high'] - data['stop_loss']) / data['entry_high'] * 100)
-    reward_pct = abs((data['take_profit'] - data['entry_high']) / data['entry_high'] * 100)
+    # Tính rủi ro
+    try:
+        risk_pct = abs((data['entry_high'] - data['stop_loss']) / data['entry_high'] * 100)
+        reward_pct = abs((data['take_profit'] - data['entry_high']) / data['entry_high'] * 100)
+    except:
+        risk_pct = 0
+        reward_pct = 0
 
-    # HTML
+    # HTML (VIẾT SÁT LỀ TRÁI, KHÔNG THỤT DÒNG)
     return f"""
-    <div class="glass-card" style="border-left: 3px solid {data['color']};">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-            <div class="metric-label" style="color:{data['color']}">{data['signal']} SWING SETUP</div>
-            <div style="font-size:10px; background:#333; padding:2px 6px; border-radius:4px; color:#ccc">R:R {data['risk_reward']}</div>
-        </div>
-        
-        <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.8;">
-            <div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px; margin-bottom:8px">
-                <div style="font-size:10px; color:#888">🎯 ENTRY ZONE (LIMIT)</div>
-                <strong style="color:{c_entry}; font-size:14px">{str_entry}</strong>
-            </div>
-            
-            <div style="display:flex; justify-content:space-between;">
-                <div>
-                    <div style="font-size:10px; color:#888">🛑 STOP LOSS (-{risk_pct:.1f}%)</div>
-                    <span style="color:{c_stop}; font-weight:bold">{str_stop}</span>
-                </div>
-                <div style="text-align:right">
-                    <div style="font-size:10px; color:#888">💰 TARGET (+{reward_pct:.1f}%)</div>
-                    <span style="color:{c_target}; font-weight:bold">{str_target}</span>
-                </div>
-            </div>
-            
-            <hr style="border-color:#333; margin:10px 0">
-            
-            <div style="font-size:11px; color:#666; font-style:italic">
-                *Chiến thuật: Swing (Săn sóng dài).<br>
-                SL được nới rộng theo ATR để tránh quét râu.
-            </div>
-        </div>
-    </div>
-    """
+<div class="glass-card" style="border-left: 3px solid {data['color']};">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+<div class="metric-label" style="color:{data['color']}">{data['signal']} SWING SETUP</div>
+<div style="font-size:10px; background:#333; padding:2px 6px; border-radius:4px; color:#ccc">R:R {data['risk_reward']}</div>
+</div>
+<div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.8;">
+<div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px; margin-bottom:8px">
+<div style="font-size:10px; color:#888">🎯 ENTRY ZONE (LIMIT)</div>
+<strong style="color:{c_entry}; font-size:14px">{str_entry}</strong>
+</div>
+<div style="display:flex; justify-content:space-between;">
+<div>
+<div style="font-size:10px; color:#888">🛑 STOP LOSS (-{risk_pct:.1f}%)</div>
+<span style="color:{c_stop}; font-weight:bold">{str_stop}</span>
+</div>
+<div style="text-align:right">
+<div style="font-size:10px; color:#888">💰 TARGET (+{reward_pct:.1f}%)</div>
+<span style="color:{c_target}; font-weight:bold">{str_target}</span>
+</div>
+</div>
+<hr style="border-color:#333; margin:10px 0">
+<div style="font-size:11px; color:#666; font-style:italic">
+*Chiến thuật: Swing (Săn sóng dài).<br>
+SL được nới rộng theo ATR để tránh quét râu.
+</div>
+</div>
+</div>
+"""
 
 def create_oscillators_html(data):
     c_stoch = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
