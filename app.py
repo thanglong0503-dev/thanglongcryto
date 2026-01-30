@@ -1,6 +1,8 @@
 import streamlit as st
 import time
-from backend.ai_forecast import run_prophet_forecast, plot_prophet_chart # <--- MỚI
+# Tìm dòng cũ: from backend.ai_forecast import run_prophet_forecast, plot_prophet_chart
+# Thay bằng:
+from backend.ai_forecast import run_ai_forecast, plot_ai_chart
 # IMPORT MODULES
 from frontend.styles import get_cyberpunk_css
 from frontend.charts import render_chart
