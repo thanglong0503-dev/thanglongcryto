@@ -1,146 +1,126 @@
 import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+from prophet import Prophet
 import plotly.graph_objects as go
+import logging
 
-def run_ai_forecast(df, periods=12):
+# Tắt log rác
+logging.getLogger('prophet').setLevel(logging.WARNING)
+logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
+
+def run_ai_forecast(df, periods=6):
     """
-    CYBER AI ENGINE V38: Hỗ trợ dự báo dài hạn (Long-term)
+    V40 ENGINE: Gộp nến H4 để AI bắt trend tốt hơn + Tăng độ nhạy
+    periods = số lượng nến H4 tương lai (VD: 6 nến H4 = 24 giờ)
     """
     try:
         # 1. CHUẨN BỊ DỮ LIỆU
-        data = df.copy()
-        data = data.reset_index()
+        data = df.copy().reset_index()
         
-        # Fix tên cột thời gian (như bản V37)
+        # Đổi tên cột chuẩn
         time_col = data.columns[0]
-        if time_col != 't':
-            data.rename(columns={time_col: 't'}, inplace=True)
+        data.rename(columns={time_col: 'ds', 'close': 'y'}, inplace=True)
+        
+        # Xóa múi giờ
+        if data['ds'].dt.tz is not None:
+            data['ds'] = data['ds'].dt.tz_localize(None)
 
-        # Feature Engineering
-        data['lag_1'] = data['close'].shift(1)
-        data['lag_2'] = data['close'].shift(2)
-        data['lag_3'] = data['close'].shift(3)
-        data['ma_5'] = data['close'].rolling(window=5).mean()
-        data['ma_20'] = data['close'].rolling(window=20).mean() # Thêm MA20 cho dài hạn
+        # === 🔑 KỸ THUẬT GỘP NẾN (RESAMPLING) ===
+        # Chuyển từ H1 -> H4 (4 Giờ 1 nến)
+        # Giúp AI nhìn được bức tranh tổng thể, đỡ bị nhiễu, vẽ đẹp hơn
+        data.set_index('ds', inplace=True)
+        df_resampled = data['y'].resample('4H').last().dropna().reset_index()
         
-        data = data.dropna()
-        if len(data) < 30: return None
+        # Lấy dữ liệu train (Vẫn lấy 300 nến, nhưng giờ là 300 nến H4 = 50 ngày)
+        # -> Đủ dài để thấy trend tuần!
+        train_data = df_resampled.tail(300).copy()
 
-        # 2. TRAIN MODEL
-        features = ['lag_1', 'lag_2', 'lag_3', 'ma_5', 'ma_20', 'volume']
-        X = data[features]
-        y = data['close']
+        # 2. CẤU HÌNH PROPHET (AGGRESSIVE MODE)
+        m = Prophet(
+            daily_seasonality=True,
+            weekly_seasonality=True, # BẬT LẠI ĐƯỢC VÌ DỮ LIỆU ĐÃ ĐỦ DÀI
+            yearly_seasonality=False,
+            changepoint_prior_scale=0.5, # TĂNG ĐỘ NHẠY (Mặc định 0.05 -> Giờ là 0.5) -> Hết bị đi ngang
+            seasonality_mode='multiplicative' # Chế độ nhân (biến động mạnh theo giá)
+        )
+        m.fit(train_data)
         
-        # Tăng số cây (estimators) lên 200 để học kỹ hơn cho đường dài
-        model = RandomForestRegressor(n_estimators=200, random_state=42)
-        model.fit(X, y)
+        # 3. DỰ BÁO
+        future = m.make_future_dataframe(periods=periods, freq='4H') # Dự báo theo khung H4
+        forecast = m.predict(future)
         
-        # 3. DỰ BÁO TƯƠNG LAI (Vòng lặp)
-        future_preds = []
-        last_row = data.iloc[-1].copy()
-        
-        # Nếu forecast quá dài (>100), ta giảm độ phức tạp tính toán MA
-        for _ in range(periods):
-            input_data = pd.DataFrame([{
-                'lag_1': last_row['close'],
-                'lag_2': last_row['lag_1'],
-                'lag_3': last_row['lag_2'],
-                'ma_5': (last_row['close'] + last_row['ma_5']*4)/5,
-                'ma_20': (last_row['close'] + last_row['ma_20']*19)/20,
-                'volume': last_row['volume']
-            }])
-            
-            pred = model.predict(input_data)[0]
-            future_preds.append(pred)
-            
-            # Cập nhật biến trễ
-            last_row['lag_3'] = last_row['lag_2']
-            last_row['lag_2'] = last_row['lag_1']
-            last_row['lag_1'] = pred
-            last_row['close'] = pred
-            
         # 4. KẾT QUẢ
-        last_date = data['t'].iloc[-1]
-        future_dates = [last_date + pd.Timedelta(hours=i+1) for i in range(periods)]
+        future_forecast = forecast.tail(periods)
+        predicted_price = future_forecast.iloc[-1]['yhat']
+        current_price = train_data.iloc[-1]['y']
         
-        forecast_df = pd.DataFrame({
-            'ds': future_dates,
-            'yhat': future_preds
-        })
-        
-        current_price = data.iloc[-1]['close']
-        predicted_price = future_preds[-1]
         diff_pct = ((predicted_price - current_price) / current_price) * 100
         
         return {
-            "forecast_df": forecast_df,
+            "forecast_df": forecast,
+            "original_data": train_data, # Dữ liệu H4
             "predicted_price": predicted_price,
             "trend": "BULLISH 🚀" if diff_pct > 0 else "BEARISH 🩸",
-            "diff_pct": diff_pct,
-            "history": data[['t', 'close']]
+            "diff_pct": diff_pct
         }
 
     except Exception as e:
-        print(f"AI Error: {e}")
+        print(f"Prophet Error: {e}")
         return None
 
 def plot_ai_chart(symbol, ai_result):
     """
-    V38: INTERACTIVE CHART (ZOOMABLE)
+    VẼ BIỂU ĐỒ BLUE CLOUD (GIỐNG STOCK DASHBOARD)
     """
     if not ai_result: return None
     
-    # Lấy nhiều dữ liệu quá khứ hơn để nhìn cho cân đối với tương lai 30 ngày
-    history = ai_result['history'].tail(200) 
-    forecast = ai_result['forecast_df']
+    fc = ai_result['forecast_df']
+    orig = ai_result['original_data']
     
+    # Hiển thị khoảng 20 ngày quá khứ + tương lai
+    display_len = 120 + len(fc) - len(orig)
+    fc_cut = fc.tail(display_len)
+    orig_cut = orig[orig['ds'] >= fc_cut['ds'].min()]
+
     fig = go.Figure()
 
-    # 1. Quá khứ
+    # 1. VÙNG MÂY (UNCERTAINTY) - QUAN TRỌNG ĐỂ NHÌN GIỐNG STOCK APP
     fig.add_trace(go.Scatter(
-        x=history['t'], y=history['close'],
-        mode='lines', name='History',
-        line=dict(color='#00f3ff', width=2)
+        x=fc_cut['ds'], y=fc_cut['yhat_upper'],
+        mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip'
+    ))
+    fig.add_trace(go.Scatter(
+        x=fc_cut['ds'], y=fc_cut['yhat_lower'],
+        mode='lines', line=dict(width=0),
+        fill='tonexty',
+        fillcolor='rgba(0, 180, 255, 0.2)', # Xanh mây
+        showlegend=False, hoverinfo='skip'
     ))
 
-    # 2. Tương lai
+    # 2. ĐƯỜNG DỰ BÁO (TREND)
     fig.add_trace(go.Scatter(
-        x=forecast['ds'], y=forecast['yhat'],
-        mode='lines', name='AI Forecast',
-        line=dict(color='#bc13fe', width=2, dash='dot')
+        x=fc_cut['ds'], y=fc_cut['yhat'],
+        mode='lines', name='AI Trend (H4)',
+        line=dict(color='#00b4ff', width=3)
     ))
 
-    # Nối dây
+    # 3. CHẤM TRÒN DỮ LIỆU THỰC
     fig.add_trace(go.Scatter(
-        x=[history['t'].iloc[-1], forecast['ds'].iloc[0]],
-        y=[history['close'].iloc[-1], forecast['yhat'].iloc[0]],
-        mode='lines', showlegend=False,
-        line=dict(color='#bc13fe', width=2, dash='dot')
+        x=orig_cut['ds'], y=orig_cut['y'],
+        mode='markers', name='Actual (H4)',
+        marker=dict(color='#00ffa3', size=5, line=dict(width=1, color='black'))
     ))
 
-    # --- CẤU HÌNH TƯƠNG TÁC (QUAN TRỌNG) ---
     fig.update_layout(
-        title=dict(text=f"🧠 AI VISION: {symbol}", font=dict(family="Orbitron", size=15, color="#bc13fe")),
+        title=dict(text=f"🔮 PROPHET H4 VISION: {symbol}", font=dict(family="Orbitron", size=15, color="#00b4ff")),
         template="plotly_dark",
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        height=500, # Cao hơn chút để dễ nhìn
+        height=500,
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h", y=1, x=0),
         hovermode="x unified",
-        
-        # Bật tính năng Zoom/Pan bằng chuột
-        dragmode='pan', 
-        
-        # Thanh trượt thời gian bên dưới
-        xaxis=dict(
-            rangeslider=dict(visible=True, thickness=0.1),
-            type="date"
-        )
+        xaxis=dict(type="date")
     )
-    
-    # Ẩn lưới thừa nhưng giữ trục giá
-    fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', side="right") # Giá bên phải cho giống TradingView
-    
+    fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', side="right")
+
     return fig
