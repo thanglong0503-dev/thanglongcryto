@@ -5,4 +5,4 @@ yfinance
 numpy
 requests
 plotly
-prophet
+scikit-learn
