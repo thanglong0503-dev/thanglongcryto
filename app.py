@@ -75,24 +75,41 @@ def show_popup_data(symbol):
                 </div>
                 """, unsafe_allow_html=True)
 
-                # 2. BATTLE PLAN BOX (VIẾT ĐƠN GIẢN ĐỂ KHÔNG BỊ LỖI RAW HTML)
+                # --- PHẦN LOGIC SMC (Thêm đoạn này vào trước st.markdown) ---
+                smc_info = data.get('smc')
+                if smc_info:
+                    # Nếu tìm thấy dấu chân cá mập
+                    smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
+                    smc_color = "#00ff9f" if "BULL" in smc_info['type'] else "#ff0055"
+                else:
+                    # Nếu không thấy gì
+                    smc_text = "NO CLEAR ZONE"
+                    smc_color = "#444" # Màu xám tối
+
+                # --- PHẦN HIỂN THỊ (SMC RADAR + BATTLE PLAN) ---
                 st.markdown(f"""
                 <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
                     <div class="metric-label" style="color:var(--neon-cyan); margin-bottom:10px">>_ BATTLE PLAN</div>
+                    
                     <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.6;">
+                        <div style="border:1px dashed {smc_color}; background:rgba(0,0,0,0.3); padding:8px; margin-bottom:12px; border-radius:4px; text-align:center">
+                            <div style="font-size:10px; color:{smc_color}; letter-spacing:1px; margin-bottom:4px">🦈 SMART MONEY ZONE</div>
+                            <strong style="color:#fff; font-size:14px">{smc_text}</strong>
+                        </div>
+                        
                         <div style="font-size:11px; color:#666">ENTRY SETUP</div>
                         🚀 <strong>ENTRY:</strong> <span style="color:#fff">{str_entry}</span><br>
                         🛑 <strong>STOP:</strong> <span style="color:#ff0055">{str_stop}</span><br>
                         💰 <strong>TARGET:</strong> <span style="color:#00ff9f">{str_target}</span>
+                        
                         <hr style="border-color:#333; margin:8px 0">
+                        
                         <div style="font-size:11px; color:#666">MARKET SCAN</div>
                         <strong>ADX:</strong> {data['strength']}<br>
                         <strong>VOL:</strong> {data['vol_status']}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-    else:
-        st.error("DATA FEED LOST")
 
 # 3. SIDEBAR
 with st.sidebar:
