@@ -13,40 +13,55 @@ from backend.logic import analyze_market
 st.set_page_config(layout="wide", page_title="CYBER COMMANDER V35", page_icon="🔮", initial_sidebar_state="expanded")
 st.markdown(get_cyberpunk_css(), unsafe_allow_html=True)
 
-# --- HÀM TẠO HTML (FIX LỖI HIỂN THỊ) ---
 def create_battle_plan_html(data):
-    """Hàm này tạo mã HTML sạch, không bị lỗi thụt dòng"""
-    # 1. Chuẩn bị số liệu
-    str_entry = f"${data['price']:,.2f}"
-    str_stop = f"${data['s1']*0.99:,.2f}"
-    str_target = f"${data['r1']:,.2f}"
+    """
+    V41 HTML: HIỂN THỊ CHIẾN LƯỢC SWING (ZONE ENTRY)
+    """
+    # Format giá tiền
+    str_entry = f"${data['entry_low']:,.0f} - ${data['entry_high']:,.0f}"
+    str_stop = f"${data['stop_loss']:,.2f}"
+    str_target = f"${data['take_profit']:,.2f}"
     
-    # 2. Xử lý SMC
-    smc_info = data.get('smc')
-    if smc_info:
-        smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
-        smc_color = "#00ff9f" if "BULL" in smc_info['type'] else "#ff0055"
-    else:
-        smc_text = "NO CLEAR ZONE"
-        smc_color = "#444"
+    # Màu sắc
+    c_entry = "#fff"
+    c_stop = "#ff0055" # Đỏ neon
+    c_target = "#00ff9f" # Xanh neon
+    
+    # Tính rủi ro (Risk) để hiển thị cho Ngài biết sẽ mất bao nhiêu %
+    risk_pct = abs((data['entry_high'] - data['stop_loss']) / data['entry_high'] * 100)
+    reward_pct = abs((data['take_profit'] - data['entry_high']) / data['entry_high'] * 100)
 
-    # 3. Trả về HTML (Viết liền mạch để không bị lỗi Markdown)
+    # HTML
     return f"""
-    <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
-        <div class="metric-label" style="color:var(--neon-cyan); margin-bottom:10px">>_ BATTLE PLAN</div>
-        <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.6;">
-            <div style="border:1px dashed {smc_color}; background:rgba(0,0,0,0.3); padding:8px; margin-bottom:12px; border-radius:4px; text-align:center">
-                <div style="font-size:10px; color:{smc_color}; letter-spacing:1px; margin-bottom:4px">🦈 SMART MONEY ZONE</div>
-                <strong style="color:#fff; font-size:13px">{smc_text}</strong>
+    <div class="glass-card" style="border-left: 3px solid {data['color']};">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+            <div class="metric-label" style="color:{data['color']}">{data['signal']} SWING SETUP</div>
+            <div style="font-size:10px; background:#333; padding:2px 6px; border-radius:4px; color:#ccc">R:R {data['risk_reward']}</div>
+        </div>
+        
+        <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.8;">
+            <div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:4px; margin-bottom:8px">
+                <div style="font-size:10px; color:#888">🎯 ENTRY ZONE (LIMIT)</div>
+                <strong style="color:{c_entry}; font-size:14px">{str_entry}</strong>
             </div>
-            <div style="font-size:11px; color:#666">ENTRY SETUP</div>
-            🚀 <strong>ENTRY:</strong> <span style="color:#fff">{str_entry}</span><br>
-            🛑 <strong>STOP:</strong> <span style="color:#ff0055">{str_stop}</span><br>
-            💰 <strong>TARGET:</strong> <span style="color:#00ff9f">{str_target}</span>
-            <hr style="border-color:#333; margin:8px 0">
-            <div style="font-size:11px; color:#666">MARKET SCAN</div>
-            <strong>ADX:</strong> {data['strength']}<br>
-            <strong>VOL:</strong> {data['vol_status']}
+            
+            <div style="display:flex; justify-content:space-between;">
+                <div>
+                    <div style="font-size:10px; color:#888">🛑 STOP LOSS (-{risk_pct:.1f}%)</div>
+                    <span style="color:{c_stop}; font-weight:bold">{str_stop}</span>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:10px; color:#888">💰 TARGET (+{reward_pct:.1f}%)</div>
+                    <span style="color:{c_target}; font-weight:bold">{str_target}</span>
+                </div>
+            </div>
+            
+            <hr style="border-color:#333; margin:10px 0">
+            
+            <div style="font-size:11px; color:#666; font-style:italic">
+                *Chiến thuật: Swing (Săn sóng dài).<br>
+                SL được nới rộng theo ATR để tránh quét râu.
+            </div>
         </div>
     </div>
     """
