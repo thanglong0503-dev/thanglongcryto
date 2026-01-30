@@ -56,25 +56,57 @@ def show_popup_data(symbol):
                 render_chart(symbol, height=500)
                 
             with c_plan:
-                # 1. OSCILLATORS BOX
+                # --- BƯỚC 1: CHUẨN BỊ SỐ LIỆU & MÀU SẮC (SMC) ---
+                smc_info = data.get('smc')
+                if smc_info:
+                    # Nếu tìm thấy dấu chân cá mập
+                    smc_text = f"{smc_info['type']}<br>Range: ${smc_info['bottom']:,.2f} - ${smc_info['top']:,.2f}"
+                    smc_color = "#00ff9f" if "BULL" in smc_info['type'] else "#ff0055"
+                else:
+                    # Nếu không thấy
+                    smc_text = "NO CLEAR ZONE"
+                    smc_color = "#444"
+
+                # Chuẩn bị các biến giá (Entry, Stop, Target)
+                str_entry = f"${data['price']:,.2f}"
+                str_stop = f"${data['s1']*0.99:,.2f}"
+                str_target = f"${data['r1']:,.2f}"
+                
+                # Màu Stoch
+                c_stoch = 'var(--neon-green)' if data['stoch_k'] < 20 else '#fff'
+
+                # --- BƯỚC 2: VẼ GIAO DIỆN BATTLE PLAN (QUAN TRỌNG: unsafe_allow_html=True) ---
                 st.markdown(f"""
                 <div class="glass-card">
                     <div class="metric-label">OSCILLATORS</div>
-                    <div style="margin-top:10px; font-family:'Share Tech Mono'; color:#ccc; font-size:14px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>RSI (14)</span> <span style="color:{c_rsi}">{str_rsi}</span>
+                    <div style="font-family:'Share Tech Mono'; color:#ccc; font-size:13px; margin-top:5px">
+                        <div style="display:flex; justify-content:space-between;"><span>RSI (14)</span><span>{data['rsi']:.1f}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span>Stoch K</span><span style="color:{c_stoch}">{data['stoch_k']:.1f}</span></div>
+                    </div>
+                </div>
+                
+                <div class="glass-card" style="border-left: 3px solid var(--neon-cyan);">
+                    <div class="metric-label" style="color:var(--neon-cyan); margin-bottom:10px">>_ BATTLE PLAN</div>
+                    
+                    <div style="font-family:'Share Tech Mono'; font-size:13px; color:#bbb; line-height:1.6;">
+                        <div style="border:1px dashed {smc_color}; background:rgba(0,0,0,0.3); padding:8px; margin-bottom:12px; border-radius:4px; text-align:center">
+                            <div style="font-size:10px; color:{smc_color}; letter-spacing:1px; margin-bottom:4px">🦈 SMART MONEY ZONE</div>
+                            <strong style="color:#fff; font-size:14px">{smc_text}</strong>
                         </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>Stoch K</span> <span style="color:{c_stoch}">{str_stoch}</span>
-                        </div>
-                        <div style="height:1px; background:#333; margin:10px 0;"></div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>TREND</span> <span style="color:{c_trend}">{data['trend']}</span>
-                        </div>
+                        
+                        <div style="font-size:11px; color:#666">ENTRY SETUP</div>
+                        🚀 <strong>ENTRY:</strong> <span style="color:#fff">{str_entry}</span><br>
+                        🛑 <strong>STOP:</strong> <span style="color:#ff0055">{str_stop}</span><br>
+                        💰 <strong>TARGET:</strong> <span style="color:#00ff9f">{str_target}</span>
+                        
+                        <hr style="border-color:#333; margin:8px 0">
+                        
+                        <div style="font-size:11px; color:#666">MARKET SCAN</div>
+                        <strong>ADX:</strong> {data['strength']}<br>
+                        <strong>VOL:</strong> {data['vol_status']}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-
                 # --- PHẦN LOGIC SMC (Thêm đoạn này vào trước st.markdown) ---
                 smc_info = data.get('smc')
                 if smc_info:
