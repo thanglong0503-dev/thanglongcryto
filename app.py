@@ -126,7 +126,8 @@ def show_popup_data(symbol):
 # 3. SIDEBAR
 with st.sidebar:
     st.markdown('<div class="glitch-header" style="font-size:24px; margin-bottom:20px">CYBER<br>ORACLE</div>', unsafe_allow_html=True)
-    mode = st.radio("SYSTEM MODE", ["🌐 MARKET GRID", "💠 DEEP SCANNER"], label_visibility="collapsed")
+    # Thêm "📰 NEWS RADAR" vào danh sách chọn
+    mode = st.radio("SYSTEM MODE", ["🌐 MARKET GRID", "💠 DEEP SCANNER", "📰 NEWS RADAR"], label_visibility="collapsed")
     st.markdown("---")
     st.caption("MACRO DATA STREAM")
     macro = fetch_global_indices()
@@ -312,6 +313,69 @@ elif mode == "💠 DEEP SCANNER":
                                 st.plotly_chart(fig_ai, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
                         else:
                             st.error("AI ERROR: Could not aggregate data. Try refreshing.")
+# ==============================================================================
+# MODE 3: NEWS SENTIMENT RADAR (GROK STYLE)
+# ==============================================================================
+elif mode == "📰 NEWS RADAR":
+    st.markdown('<div class="glitch-header">📰 GLOBAL NEWS SENTIMENT</div>', unsafe_allow_html=True)
+    
+    if st.button("🔄 SCAN LATEST NEWS", type="primary"):
+        st.cache_data.clear() # Xóa cache để lấy tin mới nhất
+        
+    with st.spinner("📡 INTERCEPTING SIGNALS FROM GLOBAL MEDIA..."):
+        from backend.news_engine import fetch_crypto_news
+        news_df, mood, score = fetch_crypto_news()
+        
+        if not news_df.empty:
+            # 1. BẢNG ĐIỀU KHIỂN TÂM LÝ (DASHBOARD)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown(f"""
+                <div class="glass-card" style="text-align:center">
+                    <div class="metric-label">MARKET MOOD</div>
+                    <div style="font-size:24px; color:#fff; font-weight:bold">{mood}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c2:
+                # Màu thanh sentiment
+                bar_color = "#00ff9f" if score > 0 else "#ff0055"
+                st.markdown(f"""
+                <div class="glass-card" style="text-align:center">
+                    <div class="metric-label">SENTIMENT SCORE</div>
+                    <div style="font-size:24px; color:{bar_color}">{score:.4f}</div>
+                    <div style="font-size:10px; color:#888">-1 (Bear) to +1 (Bull)</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"""
+                <div class="glass-card" style="text-align:center">
+                    <div class="metric-label">SOURCES SCANNED</div>
+                    <div style="font-size:24px; color:var(--neon-cyan)">{len(news_df)} ARTICLES</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.write("---")
+            
+            # 2. DANH SÁCH TIN TỨC (NEWS FEED)
+            for index, row in news_df.iterrows():
+                st.markdown(f"""
+                <div class="glass-card" style="border-left: 4px solid {row['color']}; margin-bottom:10px">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#aaa; font-size:12px">📡 {row['source']}</span>
+                        <span style="color:#666; font-size:12px">{row['published']}</span>
+                    </div>
+                    <div style="font-size:16px; font-weight:bold; color:#fff; margin:5px 0">
+                        <a href="{row['link']}" target="_blank" style="text-decoration:none; color:#fff">{row['title']}</a>
+                    </div>
+                    <div style="display:flex; align-items:center gap:10px">
+                        <span style="background:{row['color']}22; color:{row['color']}; padding:2px 8px; border-radius:4px; font-size:12px; border:1px solid {row['color']}">
+                            {row['sentiment']}
+                        </span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.error("⚠️ SIGNAL LOST: Cannot connect to News Feed. Check internet connection.")
 # ==============================================================================
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
