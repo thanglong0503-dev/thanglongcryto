@@ -224,26 +224,25 @@ elif mode == "🔮 DEEP SCANNER":
                     st.markdown(create_oscillators_html(data), unsafe_allow_html=True)
                     st.markdown(create_battle_plan_html(data), unsafe_allow_html=True)
                 
-                # === 🧠 AI SECTION (V38: TELESCOPE) ===
+                # === 🧠 AI SECTION (V40: H4 AGGREGATION) ===
                 st.write("---")
-                st.markdown('<div class="glitch-header" style="font-size:20px; color:#bc13fe">🧠 CYBER AI CORE</div>', unsafe_allow_html=True)
+                st.markdown('<div class="glitch-header" style="font-size:20px; color:#00b4ff">🔮 AI PROPHET (H4 VISION)</div>', unsafe_allow_html=True)
                 
-                # Hộp chọn thời gian dự báo
                 col_opt1, col_opt2 = st.columns([1, 4])
                 with col_opt1:
-                    horizon = st.selectbox("HORIZON", 
-                        ["12 Hours", "24 Hours", "7 Days", "30 Days"], 
-                        index=0, label_visibility="collapsed")
+                    # Các mốc thời gian hợp lý với khung H4
+                    horizon = st.selectbox("HORIZON", ["24 Hours", "3 Days", "7 Days", "14 Days"], index=1, label_visibility="collapsed")
                 
-                # Logic chuyển đổi sang số giờ
-                if horizon == "12 Hours": periods = 12
-                elif horizon == "24 Hours": periods = 24
-                elif horizon == "7 Days": periods = 7 * 24
-                else: periods = 30 * 24 # 720 giờ
+                # Quy đổi ra số lượng nến H4 (periods)
+                if horizon == "24 Hours": periods = 6   # 6 x 4h = 24h
+                elif horizon == "3 Days": periods = 18  # 18 x 4h = 72h
+                elif horizon == "7 Days": periods = 42  # 42 x 4h = 1 tuần
+                else: periods = 84                      # 2 tuần
                 
-                if st.button(f"RUN PREDICTION ({horizon})", key="btn_deep_ai"):
-                    with st.spinner(f"⚡ CALCULATING {periods} FUTURE STEPS..."):
+                if st.button(f"RUN PREDICTION ({horizon})", key="btn_prophet"):
+                    with st.spinner(f"⚡ AGGREGATING H4 CANDLES & PREDICTING..."):
                         from backend.ai_forecast import run_ai_forecast, plot_ai_chart
+                        
                         ai_res = run_ai_forecast(df, periods=periods)
                         
                         if ai_res:
@@ -251,17 +250,17 @@ elif mode == "🔮 DEEP SCANNER":
                             with c_ai1:
                                 diff_color = "#00ff9f" if ai_res['diff_pct'] > 0 else "#ff0055"
                                 st.markdown(f"""
-                                <div class="glass-card" style="border: 1px solid #bc13fe; text-align:center">
-                                    <div style="font-size:12px; color:#bc13fe; margin-bottom:5px">TARGET ({horizon})</div>
+                                <div class="glass-card" style="border: 1px solid #00b4ff; text-align:center">
+                                    <div style="font-size:12px; color:#00b4ff; margin-bottom:5px">TARGET ({horizon})</div>
                                     <div style="font-family:'Orbitron'; font-size:20px; color:#fff">${ai_res['predicted_price']:,.2f}</div>
                                     <div style="font-family:'Share Tech Mono'; font-size:14px; color:{diff_color}; margin-top:5px">
                                         {ai_res['trend']} ({ai_res['diff_pct']:+.2f}%)
                                     </div>
-                                    <div style="font-size:10px; color:#666; margin-top:10px">Model: Random Forest<br>Samples: {len(df)}</div>
+                                    <div style="font-size:10px; color:#666; margin-top:10px">Mode: Aggressive (H4)<br>Sensitivity: High</div>
                                 </div>
                                 """, unsafe_allow_html=True)
                             with c_ai2:
                                 fig_ai = plot_ai_chart(symbol, ai_res)
                                 st.plotly_chart(fig_ai, use_container_width=True)
                         else:
-                            st.error(f"AI ERROR: Insufficient data for {horizon} forecast.")
+                            st.error("AI ERROR: Could not aggregate data. Try refreshing.")
