@@ -189,7 +189,7 @@ if mode == "🌐 MARKET GRID":
 # ==============================================================================
 # MODE 2: DEEP SCANNER (V38: TELESCOPE MODE)
 # ==============================================================================
-elif mode == "🔮 DEEP SCANNER":
+elif mode == "💠 DEEP SCANNER":
     st.markdown('<div class="glitch-header">DEEP SCANNER</div>', unsafe_allow_html=True)
     
     col_search, col_pad = st.columns([1, 2])
