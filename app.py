@@ -261,6 +261,7 @@ elif mode == "🔮 DEEP SCANNER":
                                 """, unsafe_allow_html=True)
                             with c_ai2:
                                 fig_ai = plot_ai_chart(symbol, ai_res)
-                                st.plotly_chart(fig_ai, use_container_width=True)
+                                # BẬT TÍNH NĂNG SCROLL ZOOM (LĂN CHUỘT)
+                                st.plotly_chart(fig_ai, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
                         else:
                             st.error("AI ERROR: Could not aggregate data. Try refreshing.")
