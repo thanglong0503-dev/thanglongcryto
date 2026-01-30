@@ -194,9 +194,35 @@ elif mode == "💠 DEEP SCANNER":
     
     col_search, col_pad = st.columns([1, 2])
     with col_search:
-        HUGE_ASSETS = ["BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "PEPE", "SHIB", "WIF", "SUI", "NEAR", "APT", "DOT", "LTC"]
-        selected_asset = st.selectbox("SELECT ASSET", HUGE_ASSETS + ["...CUSTOM..."], label_visibility="collapsed")
-        symbol = st.text_input("TYPE SYMBOL", "BTC").upper() if selected_asset == "...CUSTOM..." else selected_asset
+        # --- 1. DANH SÁCH CRYPTO (MỞ RỘNG) ---
+        CRYPTO = [
+            "BTC", "ETH", "BNB", "SOL", "XRP", "DOGE", "ADA", "AVAX", "LINK", "TRX", "TON",
+            "PEPE", "SHIB", "WIF", "BONK", "FLOKI", "BOME",
+            "SUI", "NEAR", "APT", "DOT", "LTC", "ARB", "OP", "TIA", "SEI", "INJ"
+        ]
+        
+        # --- 2. DANH SÁCH VÀNG & CHỨNG KHOÁN (YAHOO TICKERS) ---
+        MACRO = [
+            "GC=F",     # 🥇 VÀNG (Gold Futures)
+            "SI=F",     # 🥈 BẠC (Silver Futures)
+            "CL=F",     # 🛢️ DẦU (Crude Oil)
+            "^GSPC",    # 🇺🇸 S&P 500 (Mỹ)
+            "^IXIC",    # 💻 NASDAQ (Công nghệ)
+            "^DJI",     # 🏭 DOW JONES (Công nghiệp)
+            "EURUSD=X", # 💶 EURO vs USD
+            "JPY=X",    # 💴 USD vs YÊN NHẬT
+            "GBPUSD=X"  # 💷 BẢNG ANH vs USD
+        ]
+        
+        # Gộp danh sách
+        FULL_LIST = CRYPTO + MACRO
+        
+        selected_asset = st.selectbox("SELECT ASSET", FULL_LIST + ["...CUSTOM..."], label_visibility="collapsed")
+        
+        if selected_asset == "...CUSTOM...":
+            symbol = st.text_input("TYPE SYMBOL (Ex: BTC, GC=F)", "BTC").upper()
+        else:
+            symbol = selected_asset
 
     st.write("---")
     
