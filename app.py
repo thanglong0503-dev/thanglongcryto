@@ -378,62 +378,60 @@ elif mode == "📰 NEWS RADAR":
             st.error("⚠️ SIGNAL LOST: Cannot connect to News Feed. Check internet connection.")
 
 # ==============================================================================
-# MODE 4: WHALE TRACKER (THEO DÕI CÁ MẬP)
-# ==============================================================================
-elif mode == "🐋 WHALE TRACKER":
-    st.markdown('<div class="glitch-header">🐋 WHALE HUNTER SONAR</div>', unsafe_allow_html=True)
-    st.caption("Spy on Top Binance Traders' Positions (Real-time)")
-    
-    # Hướng dẫn lấy UID
-    with st.expander("ℹ️ LÀM SAO ĐỂ LẤY UID CỦA CÁ MẬP?", expanded=False):
-        st.write("""
-        1. Vào Binance Leaderboard.
-        2. Bấm vào Trader bạn muốn theo dõi.
-        3. Nhìn lên thanh địa chỉ URL.
-        4. Copy đoạn mã dài ngoằng sau chữ `encryptedUid=`.
-        *Ví dụ: https://www.binance.com/...&encryptedUid=**D3F5...A9B**...*
-        """)
+# ... Bên trong elif mode == "🐋 WHALE TRACKER": ...
 
-    # Nhập UID
-    # Mặc định là UID của một Top Trader (để test)
-    default_uid = "D3D69E66B4C4C7B7F766C05318E8C3D2" 
-    target_uid = st.text_input("PASTE ENCRYPTED UID HERE:", value="")
+    st.caption("Spy on Binance Top Traders (Supports both Leaderboard & Copy Trade IDs)")
+
+    # Input ID đa năng
+    target_uid = st.text_input("ENTER ID (Encrypted UID or Portfolio ID):", 
+                              value="", 
+                              placeholder="Ex: D3F... (Leaderboard) or 465... (Smart Money)")
     
     if st.button("🛰️ SCAN POSITIONS"):
         if target_uid:
-            from backend.whale_hunter import get_trader_positions
+            # Gọi hàm quét thông minh từ whale_hunter
+            from backend.whale_hunter import scan_whale
             
             with st.spinner("HACKING BINANCE MAINFRAME..."):
-                df_whale, msg = get_trader_positions(target_uid)
+                df_whale, msg = scan_whale(target_uid)
                 
                 if df_whale is not None:
-                    st.success(f"✅ TARGET ACQUIRED! FOUND {len(df_whale)} ACTIVE POSITIONS.")
+                    # Tính tổng PnL để hiển thị cho ngầu
+                    total_pnl = df_whale['PNL ($)'].sum()
+                    pnl_color = "#00ff9f" if total_pnl >= 0 else "#ff0055"
                     
+                    st.markdown(f"""
+                    <div style="text-align:center; margin-bottom:20px">
+                        <span style="font-size:16px; color:#888">LIVE PNL ESTIMATE</span><br>
+                        <span style="font-size:32px; font-weight:bold; color:{pnl_color}">${total_pnl:,.2f}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Hiển thị từng lệnh
                     for index, row in df_whale.iterrows():
-                        # Màu sắc ROI
                         roi_color = "#00ff9f" if row['ROI (%)'] > 0 else "#ff0055"
+                        direction = "LONG 🟢" if row['SIZE'] > 0 else "SHORT 🔴"
                         
                         st.markdown(f"""
                         <div class="glass-card" style="border-left: 4px solid {roi_color}">
                             <div style="display:flex; justify-content:space-between; align-items:center">
-                                <span style="font-size:20px; font-weight:bold; color:#fff">{row['SYMBOL']}</span>
+                                <div>
+                                    <span style="font-size:20px; font-weight:bold; color:#fff">{row['SYMBOL']}</span>
+                                    <span style="background:#333; padding:2px 8px; border-radius:4px; font-size:12px; margin-left:10px">{direction}</span>
+                                </div>
                                 <span style="font-size:18px; font-weight:bold; color:{roi_color}">{row['ROI (%)']:.2f}%</span>
                             </div>
                             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-top:10px; font-size:12px; color:#aaa">
                                 <div>ENTRY: <span style="color:#fff">{row['ENTRY']}</span></div>
-                                <div>MARK: <span style="color:#fff">{row['MARK']}</span></div>
+                                <div>SIZE: <span style="color:#fff">{row['SIZE']}</span></div>
                                 <div>PNL: <span style="color:{roi_color}">${row['PNL ($)']:,.2f}</span></div>
-                            </div>
-                            <div style="margin-top:5px; font-size:10px; color:#666">
-                                Updated: {row['TIME']}
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
                 else:
                     st.warning(msg)
         else:
-            st.info("⚠️ Hãy nhập UID để bắt đầu quét.")
-# ==============================================================================
+            st.info("⚠️ Hãy nhập UID hoặc Portfolio ID để bắt đầu quét.")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
 st.markdown("""
