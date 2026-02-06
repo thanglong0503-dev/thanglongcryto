@@ -7,48 +7,39 @@ DEMO_KEY = "YourApiKeyToken"
 
 def get_current_prices():
     """
-    V54: HỆ THỐNG LẤY GIÁ ĐA TẦNG (MULTI-LAYER ORACLE)
-    1. Ưu tiên CoinGecko (Đa dạng coin)
-    2. Dự phòng Binance (Cực nhanh & Ổn định)
-    3. Giá cứng (Emergency Price) nếu mất mạng hoàn toàn
+    V56: GIÁ REAL-TIME TỪ BINANCE (KHÔNG HARDCODE)
     """
+    # Khởi tạo giá bằng 0 (Nếu không lấy được thì hiện 0 để biết đường sửa)
     prices = {"ETH": 0, "BTC": 0, "BNB": 0}
     
-    # LAYER 1: COINGECKO API
     try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin,binancecoin&vs_currencies=usd"
-        res = requests.get(url, timeout=3).json()
-        prices["ETH"] = res.get('ethereum', {}).get('usd', 0)
-        prices["BTC"] = res.get('bitcoin', {}).get('usd', 0)
-        prices["BNB"] = res.get('binancecoin', {}).get('usd', 0)
-    except:
-        pass # Nếu lỗi, im lặng chuyển sang Layer 2
-
-    # LAYER 2: BINANCE API (Dự phòng nếu CoinGecko chết)
-    if prices["ETH"] == 0:
+        # GỌI TRỰC TIẾP BINANCE (Nhanh & Chính xác nhất)
+        # Timeout cực ngắn (2s) để App không bị đơ
+        eth_res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT", timeout=2).json()
+        btc_res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=2).json()
+        bnb_res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT", timeout=2).json()
+        
+        # Cập nhật giá
+        if 'price' in eth_res: prices["ETH"] = float(eth_res['price'])
+        if 'price' in btc_res: prices["BTC"] = float(btc_res['price'])
+        if 'price' in bnb_res: prices["BNB"] = float(bnb_res['price'])
+        
+    except Exception as e:
+        # Nếu Binance chặn (hiếm khi), thử cứu cánh bằng CoinGecko
         try:
-            # Lấy lẻ từng cặp
-            eth = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT", timeout=3).json()
-            btc = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=3).json()
-            bnb = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT", timeout=3).json()
-            
-            prices["ETH"] = float(eth.get('price', 0))
-            prices["BTC"] = float(btc.get('price', 0))
-            prices["BNB"] = float(bnb.get('price', 0))
+            url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin,binancecoin&vs_currencies=usd"
+            res = requests.get(url, timeout=2).json()
+            prices["ETH"] = res['ethereum']['usd']
+            prices["BTC"] = res['bitcoin']['usd']
+            prices["BNB"] = res['binancecoin']['usd']
         except:
-            pass
-            
-    # LAYER 3: EMERGENCY HARDCODED (Giá cứng tạm thời để không bị $0)
-    if prices["ETH"] == 0:
-        prices = {"ETH": 2800.0, "BTC": 95000.0, "BNB": 600.0}
+            pass # Nếu cả 2 đều chết thì chấp nhận giá = 0 (Không bịa số)
 
     return prices
 
 def get_api_config(chain):
-    if chain == "BSC":
-        return {"url": "https://api.bscscan.com/api", "params_extra": {}}
-    else: # ETH
-        return {"url": "https://api.etherscan.io/v2/api", "params_extra": {"chainid": "1"}}
+    if chain == "BSC": return {"url": "https://api.bscscan.com/api", "params_extra": {}}
+    else: return {"url": "https://api.etherscan.io/v2/api", "params_extra": {"chainid": "1"}}
 
 def get_native_symbol(chain):
     return "BNB" if chain == "BSC" else "ETH"
@@ -66,14 +57,11 @@ def get_wallet_balance(address, chain="ETH", api_key=None):
     except Exception as e: return 0, str(e)
 
 def get_token_tx(address, chain="ETH", api_key=None):
-    """
-    V54: GIỮ NGUYÊN TÍNH NĂNG QUÉT 2 LUỒNG (NATIVE + TOKEN)
-    """
     key = api_key if api_key and len(api_key) > 5 else DEMO_KEY
     config = get_api_config(chain)
     all_txs = []
     
-    # 1. NATIVE TRANSACTIONS
+    # 1. NATIVE
     url_native = f"{config['url']}?module=account&action=txlist&address={address}&page=1&offset=50&sort=desc&apikey={key}"
     for k, v in config['params_extra'].items(): url_native += f"&{k}={v}"
     try:
@@ -94,7 +82,7 @@ def get_token_tx(address, chain="ETH", api_key=None):
                     })
     except: pass
 
-    # 2. TOKEN TRANSACTIONS
+    # 2. TOKENS
     url_token = f"{config['url']}?module=account&action=tokentx&address={address}&page=1&offset=50&sort=desc&apikey={key}"
     for k, v in config['params_extra'].items(): url_token += f"&{k}={v}"
     try:
@@ -109,7 +97,7 @@ def get_token_tx(address, chain="ETH", api_key=None):
                 except: val = 0
                 
                 token_class = "TOKEN"
-                if symbol.upper() == "ETH": token_class = "⚠️ FAKE/SCAM"
+                if symbol.upper() == "ETH": token_class = "⚠️ FAKE"
                 
                 if val > 0:
                     ts = int(tx.get('timeStamp', 0))
