@@ -2,7 +2,7 @@ import json
 import os
 
 # Đường dẫn file lưu trữ (Nó sẽ tự tạo file này nếu chưa có)
-DB_FILE = "backend/shark_book.json"
+DB_FILE = "backend/shark_book_v2.json"
 
 # backend/wallet_manager.py
 
