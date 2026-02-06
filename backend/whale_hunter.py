@@ -1,62 +1,73 @@
 import requests
 import pandas as pd
 import json
+import random
 
-# --- CẤU HÌNH HEADERS GIẢ LẬP CHROME THẬT ---
+# --- CẤU HÌNH HEADERS GIẢ LẬP ---
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Content-Type": "application/json",
     "Clienttype": "web",
-    "Lang": "vi",
-    "Origin": "https://www.binance.com",
-    "Referer": "https://www.binance.com/vi/smart-money/profile"
 }
 
+# DANH SÁCH CÁC CỬA SAU (MIRROR DOMAINS)
+# Nếu .com bị chặn (do IP Mỹ), ta thử lách qua .me hoặc .info
+DOMAINS = [
+    "https://www.binance.me",      # Thường dùng để né chặn
+    "https://www.binance.info",    # Cổng thông tin
+    "https://www.binance.com",     # Cổng chính (dễ bị chặn ở Mỹ)
+]
+
+def make_request(endpoint, payload):
+    """Hàm bắn thử vào từng tên miền cho đến khi thủng"""
+    for domain in DOMAINS:
+        url = f"{domain}{endpoint}"
+        # Cập nhật Origin/Referer theo domain đang thử
+        current_headers = HEADERS.copy()
+        current_headers["Origin"] = domain
+        current_headers["Referer"] = f"{domain}/vi/smart-money/profile"
+        
+        try:
+            res = requests.post(url, json=payload, headers=current_headers, timeout=5)
+            data = res.json()
+            
+            # Kiểm tra xem có bị chặn địa lý không
+            if data.get('code') == '000000' or data.get('success') is True:
+                return data, None # Thành công
+            
+            # Nếu bị chặn địa lý, thử domain tiếp theo
+            if "restricted location" in str(data.get('msg', '')):
+                continue 
+                
+        except:
+            continue
+            
+    return None, "❌ Đã thử tất cả các cổng nhưng Server IP này (Mỹ) bị Binance chặn hoàn toàn."
+
 def get_leaderboard_positions(encrypted_uid):
-    """CÁCH 1: Leaderboard (Dùng cổng Friendly luôn cho chắc)"""
-    url = "https://www.binance.com/bapi/futures/v1/friendly/future/leaderboard/getOtherPosition"
+    endpoint = "/bapi/futures/v1/friendly/future/leaderboard/getOtherPosition"
     payload = {"encryptedUid": encrypted_uid, "tradeType": "PERPETUAL"}
     
-    try:
-        res = requests.post(url, json=payload, headers=HEADERS, timeout=5).json()
-        if res.get('success') and res.get('data'):
-            return process_data(res['data']['otherPositionRetList'])
-        return None, "⚠️ Không tìm thấy lệnh (Leaderboard)."
-    except Exception as e:
-        return None, f"❌ Lỗi Leaderboard: {str(e)}"
+    data, err = make_request(endpoint, payload)
+    if data:
+        if data.get('data'):
+            return process_data(data['data']['otherPositionRetList'])
+        return None, "⚠️ Trader này đang ẩn danh sách hoặc không có lệnh."
+    return None, err
 
 def get_copy_trade_positions(portfolio_id):
-    """CÁCH 2: Smart Money (Copy Trade) - Cổng Friendly"""
-    # Đổi sang cổng 'friendly' (dễ tính hơn public)
-    url = "https://www.binance.com/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/position-list"
+    endpoint = "/bapi/futures/v1/friendly/future/copy-trade/lead-portfolio/position-list"
     payload = {"portfolioId": str(portfolio_id)}
     
-    try:
-        response = requests.post(url, json=payload, headers=HEADERS, timeout=5)
-        
-        # DEBUG: Nếu không phải JSON (bị chặn IP), in ra mã lỗi HTML
-        try:
-            res = response.json()
-        except:
-            return None, f"⚠️ Lỗi Phản Hồi (Not JSON): Status {response.status_code}"
+    data, err = make_request(endpoint, payload)
+    if data:
+        if data.get('data'):
+            return process_data_copy_trade(data.get('data'))
+        return None, "⚠️ Danh sách lệnh TRỐNG."
+    return None, err
 
-        # Kiểm tra thành công (Code 000000)
-        if res.get('success') is True or res.get('code') == '000000':
-            data_list = res.get('data')
-            if data_list is not None and len(data_list) > 0:
-                return process_data_copy_trade(data_list)
-            else:
-                return None, "⚠️ Trader này đang KHÔNG CÓ LỆNH (Trống)."
-        else:
-            # In nguyên văn phản hồi của Binance để debug
-            raw_err = json.dumps(res) 
-            return None, f"⚠️ Binance Từ Chối: {raw_err}"
-            
-    except Exception as e:
-        return None, f"❌ Lỗi Smart Money: {str(e)}"
-
+# --- CÁC HÀM XỬ LÝ DỮ LIỆU (GIỮ NGUYÊN) ---
 def process_data(data_list):
-    """Xử lý dữ liệu Leaderboard"""
     if not data_list: return None, "No Data"
     df = pd.DataFrame(data_list)
     cols = {'symbol': 'SYMBOL', 'entryPrice': 'ENTRY', 'markPrice': 'MARK', 'amount': 'SIZE', 'pnl': 'PNL ($)', 'roe': 'ROI (%)', 'updateTime': 'TIME'}
@@ -67,7 +78,6 @@ def process_data(data_list):
     return df, "OK"
 
 def process_data_copy_trade(data_list):
-    """Xử lý dữ liệu Copy Trade"""
     cleaned = []
     for item in data_list:
         cleaned.append({
