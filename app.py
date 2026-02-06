@@ -379,47 +379,96 @@ elif mode == "📰 NEWS RADAR":
 
 # ==============================================================================
 # ==============================================================================
-# MODE 4: ON-CHAIN STALKER (BẢN FINAL V47)
+# MODE 4: ON-CHAIN STALKER (BẢN CÓ SỔ TAY BOOKMARK)
 # ==============================================================================
 elif mode == "🐋 WHALE TRACKER": 
     st.markdown('<div class="glitch-header">🦈 ON-CHAIN STALKER</div>', unsafe_allow_html=True)
-    st.caption("Spy on Whales across Binance Smart Chain & Ethereum")
+    st.caption("Spy on Whales & Manage your Target List")
 
-    # 1. CẤU HÌNH SOI
-    c1, c2 = st.columns([1, 3])
+    # Import quản lý ví
+    try:
+        from backend.wallet_manager import load_book, add_shark, delete_shark
+        saved_sharks = load_book()
+    except:
+        st.error("Thiếu file backend/wallet_manager.py!")
+        st.stop()
+
+    # --- KHU VỰC 1: CẤU HÌNH & CHỌN VÍ ---
+    c1, c2 = st.columns([1, 2])
+    
     with c1:
-        # Chọn mạng
-        chain_opt = st.selectbox("NETWORK", ["BSC", "ETH"])
+        chain_opt = st.selectbox("NETWORK", ["ETH", "BSC"])
+        
+        # DROPDOWN CHỌN CÁ MẬP TỪ SỔ TAY
+        # Tạo danh sách tên để hiển thị
+        shark_names = ["🔍 ...Type Manually..."] + [f"{s['name']}" for s in saved_sharks]
+        selected_shark_name = st.selectbox("📂 BOOKMARKS (SAVED WALLETS)", shark_names)
+
     with c2:
-        # Nhập Key (Có hướng dẫn rõ ràng)
-        key_placeholder = "Paste BscScan Key here..." if chain_opt == "BSC" else "Paste Etherscan Key here..."
-        user_api = st.text_input(f"YOUR {chain_opt} API KEY (Optional):", type="password", placeholder=key_placeholder)
+        # Xử lý Logic chọn ví
+        default_val = ""
+        if selected_shark_name != "🔍 ...Type Manually...":
+            # Tìm địa chỉ tương ứng với tên đã chọn
+            for s in saved_sharks:
+                if s['name'] == selected_shark_name:
+                    default_val = s['address']
+                    break
+        
+        target_wallet = st.text_input("TARGET WALLET ADDRESS:", value=default_val, placeholder="0x...")
 
-    # 2. NHẬP VÍ MỤC TIÊU
-    target_wallet = st.text_input("TARGET WALLET ADDRESS (0x...):", value="", placeholder="Ex: 0x8894e0a0c962cb723c1976a4421c95949be2d4e3")
+    # --- KHU VỰC 2: QUẢN LÝ (THÊM / XÓA) ---
+    with st.expander("⚙️ QUẢN LÝ DANH BẠ (THÊM / XÓA VÍ)"):
+        col_add, col_del = st.columns(2)
+        
+        # Thêm ví mới
+        with col_add:
+            st.markdown("**➕ THÊM VÍ MỚI**")
+            new_name = st.text_input("Tên gợi nhớ (Ví dụ: Cá mập A)", key="new_name")
+            new_addr = st.text_input("Địa chỉ ví (0x...)", key="new_addr")
+            if st.button("LƯU LẠI"):
+                if new_name and new_addr:
+                    ok, msg = add_shark(new_name, new_addr)
+                    if ok: st.success(msg)
+                    else: st.warning(msg)
+                    st.rerun() # Load lại trang để cập nhật danh sách
+                else:
+                    st.warning("Nhập đủ tên và ví nhé!")
 
-    # 3. NÚT QUÉT
+        # Xóa ví đang chọn
+        with col_del:
+            st.markdown("**🗑️ XÓA VÍ ĐANG CHỌN**")
+            if selected_shark_name != "🔍 ...Type Manually...":
+                st.write(f"Đang chọn: **{selected_shark_name}**")
+                if st.button("XÓA KHỎI SỔ"):
+                    # Tìm địa chỉ để xóa
+                    addr_to_del = next((s['address'] for s in saved_sharks if s['name'] == selected_shark_name), None)
+                    if addr_to_del:
+                        ok, msg = delete_shark(addr_to_del)
+                        if ok: st.success(msg)
+                        st.rerun()
+            else:
+                st.info("Hãy chọn một ví trong danh sách để xóa.")
+
+    # --- KHU VỰC 3: QUÉT (GIỮ NGUYÊN CODE CŨ) ---
+    # Nhập Key (Ẩn bớt cho gọn)
+    user_api = st.text_input("API KEY (Optional):", type="password", placeholder="Paste Key if needed...")
+
     if st.button("🛰️ SCAN WALLET ACTIVITIES"):
-        # Kiểm tra định dạng ví cơ bản
         if len(target_wallet) == 42 and target_wallet.startswith("0x"):
             try:
                 from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol
                 
                 with st.spinner(f"HACKING INTO {chain_opt} BLOCKCHAIN..."):
                     
-                    # A. LẤY SỐ DƯ (Native Balance)
+                    # A. LẤY SỐ DƯ
                     native_bal, err_bal = get_wallet_balance(target_wallet, chain_opt, user_api)
                     native_sym = get_native_symbol(chain_opt)
                     
-                    # B. LẤY GIAO DỊCH (Token Transfers)
+                    # B. LẤY GIAO DỊCH
                     df_tx, err_tx = get_token_tx(target_wallet, chain_opt, user_api)
                     
-                    # --- HIỂN THỊ KẾT QUẢ ---
-                    
-                    # 1. Hiển thị Số Dư (Hoặc Lỗi nếu có)
-                    if err_bal:
-                        st.error(f"⚠️ BALANCE ERROR: {err_bal}")
-                        st.caption("👉 Gợi ý: Kiểm tra lại API Key xem có đúng mạng (BSC vs ETH) chưa?")
+                    # HIỂN THỊ
+                    if err_bal: st.error(f"⚠️ BALANCE ERROR: {err_bal}")
                     
                     st.markdown(f"""
                     <div style="text-align:center; margin-bottom:20px; border:1px solid #333; padding:15px; border-radius:10px; background:rgba(20,20,20,0.8)">
@@ -430,12 +479,9 @@ elif mode == "🐋 WHALE TRACKER":
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # 2. Hiển thị Giao Dịch
                     if df_tx is not None and not df_tx.empty:
                         st.markdown(f"### 📜 LATEST MOVES ({len(df_tx)} txs)")
-                        
                         for index, row in df_tx.iterrows():
-                            # Thẻ hiển thị từng giao dịch
                             st.markdown(f"""
                             <div class="glass-card" style="border-left: 4px solid {row['COLOR']}; margin-bottom:8px; padding:12px">
                                 <div style="display:flex; justify-content:space-between; align-items:center">
@@ -451,18 +497,13 @@ elif mode == "🐋 WHALE TRACKER":
                             </div>
                             """, unsafe_allow_html=True)
                     else:
-                        # Nếu không có giao dịch hoặc lỗi
-                        if err_tx:
-                            st.warning(f"⚠️ TRANSACTION LOG: {err_tx}")
-                        else:
-                            st.info("ℹ️ Ví này đang ngủ đông (Không có giao dịch Token gần đây).")
+                        if err_tx: st.warning(f"⚠️ LOG: {err_tx}")
+                        else: st.info("ℹ️ Ví này đang ngủ đông.")
                         
-            except ImportError:
-                st.error("❌ Lỗi File: Chưa tìm thấy file 'backend/wallet_stalker.py'. Hãy tạo file này trước!")
             except Exception as e:
                 st.error(f"❌ SYSTEM ERROR: {e}")
         else:
-            st.error("⚠️ Địa chỉ ví không hợp lệ! (Phải bắt đầu bằng '0x' và dài 42 ký tự)")
+            st.error("⚠️ Địa chỉ ví không hợp lệ!")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
 st.markdown("""
