@@ -402,15 +402,20 @@ elif mode == "🐋 WHALE TRACKER":
             try:
                 from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol
                 
+                # ... (Phần code cũ trong Mode 4) ...
+
                 with st.spinner(f"ACCESSING {chain_opt} BLOCKCHAIN..."):
-                    # A. Lấy số dư Coin nền tảng (BNB/ETH)
-                    native_bal = get_wallet_balance(target_wallet, chain_opt, user_api)
+                    # A. Lấy số dư (Hàm mới trả về 2 giá trị: số dư và lỗi)
+                    native_bal, err_bal = get_wallet_balance(target_wallet, chain_opt, user_api)
                     native_sym = get_native_symbol(chain_opt)
                     
-                    # B. Lấy lịch sử giao dịch Token
-                    df_tx = get_token_tx(target_wallet, chain_opt, user_api)
+                    # B. Lấy lịch sử giao dịch
+                    df_tx, err_tx = get_token_tx(target_wallet, chain_opt, user_api)
                     
-                    # C. HIỂN THỊ KẾT QUẢ
+                    # C. HIỂN THỊ KẾT QUẢ HOẶC LỖI
+                    if err_bal:
+                        st.error(err_bal) # <--- In lỗi to đùng ra đây nếu sai Key
+                    
                     st.markdown(f"""
                     <div style="text-align:center; margin-bottom:20px; border:1px solid #444; padding:15px; border-radius:10px; background:rgba(0,0,0,0.3)">
                         <div style="color:#aaa; font-size:12px">NATIVE BALANCE</div>
@@ -421,29 +426,10 @@ elif mode == "🐋 WHALE TRACKER":
                     """, unsafe_allow_html=True)
                     
                     if df_tx is not None and not df_tx.empty:
-                        st.subheader(f"📜 RECENT MOVES ON {chain_opt}")
-                        for index, row in df_tx.iterrows():
-                            st.markdown(f"""
-                            <div class="glass-card" style="border-left: 3px solid {row['COLOR']}; padding:10px; margin-bottom:8px">
-                                <div style="display:flex; justify-content:space-between; align-items:center">
-                                    <div style="display:flex; align-items:center; gap:10px">
-                                        <span style="font-weight:bold; font-size:18px; color:#fff">{row['SYMBOL']}</span>
-                                        <span style="font-size:10px; color:#888">{row['TIME']}</span>
-                                    </div>
-                                    <div style="text-align:right">
-                                        <div style="color:{row['COLOR']}; font-weight:bold; font-size:12px">{row['TYPE']}</div>
-                                        <div style="color:#fff; font-size:14px">{row['AMOUNT']:,.2f}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info(f"ℹ️ Không tìm thấy giao dịch Token nào gần đây trên mạng {chain_opt}.")
-                        
-            except Exception as e:
-                st.error(f"MODULE ERROR: {e}")
-        else:
-            st.warning("⚠️ Địa chỉ ví không hợp lệ (Phải bắt đầu bằng 0x...).")
+                        # ... (Giữ nguyên phần hiển thị bảng giao dịch) ...
+                        st.dataframe(df_tx) # Hoặc code hiển thị cũ
+                    elif err_tx:
+                        st.warning(err_tx) # <--- In lỗi của phần Token
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
 st.markdown("""
