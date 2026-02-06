@@ -2,52 +2,60 @@ import requests
 import pandas as pd
 from datetime import datetime
 
-# --- CẤU HÌNH V2 (UNIVERSAL) ---
-# Dùng chung 1 cổng cho tất cả mạng
-BASE_URL_V2 = "https://api.etherscan.io/v2/api"
-DEMO_KEY = "YourApiKeyToken" 
+# --- CẤU HÌNH ---
+DEMO_KEY = "YourApiKeyToken"
 
-def get_chain_id(chain):
-    """Lấy ID mạng theo chuẩn V2"""
-    if chain == "BSC": return "56"  # ID của Binance Smart Chain
-    if chain == "ETH": return "1"   # ID của Ethereum
-    return "1"
+def get_api_config(chain):
+    """
+    CHIẾN THUẬT HYBRID:
+    - ETH: Dùng cổng Etherscan V2 (Chuẩn mới)
+    - BSC: Dùng cổng BscScan V1 (Chuẩn cũ nhưng MIỄN PHÍ)
+    """
+    if chain == "BSC":
+        # Cổng BscScan truyền thống (Free Tier chạy ngon)
+        return {
+            "url": "https://api.bscscan.com/api",
+            "params_extra": {} # BscScan V1 không cần chainid
+        }
+    else: # ETH
+        # Cổng Etherscan V2
+        return {
+            "url": "https://api.etherscan.io/v2/api",
+            "params_extra": {"chainid": "1"} # ETH ID = 1
+        }
 
 def get_native_symbol(chain):
     return "BNB" if chain == "BSC" else "ETH"
 
 def get_wallet_balance(address, chain="BSC", api_key=None):
-    """
-    Lấy số dư qua cổng V2 (Chuẩn mới)
-    """
     key = api_key if api_key and len(api_key) > 5 else DEMO_KEY
-    chain_id = get_chain_id(chain)
+    config = get_api_config(chain)
     
-    # URL chuẩn V2: Thêm tham số &chainid=...
-    url = f"{BASE_URL_V2}?chainid={chain_id}&module=account&action=balance&address={address}&tag=latest&apikey={key}"
+    # Tạo URL
+    url = f"{config['url']}?module=account&action=balance&address={address}&tag=latest&apikey={key}"
+    # Thêm tham số phụ (chainid nếu là ETH)
+    for k, v in config['params_extra'].items():
+        url += f"&{k}={v}"
     
     try:
         res = requests.get(url, timeout=5).json()
         
-        # STATUS 1 = OK
         if res['status'] == '1':
             val = float(res['result']) / 10**18
             return val, None
         else:
-            return 0, f"API V2 Error: {res.get('message')} - {res.get('result')}"
+            return 0, f"{chain} API Error: {res.get('message')} - {res.get('result')}"
             
     except Exception as e:
         return 0, f"Connect Error: {str(e)}"
 
 def get_token_tx(address, chain="BSC", api_key=None):
-    """
-    Lấy giao dịch Token qua cổng V2
-    """
     key = api_key if api_key and len(api_key) > 5 else DEMO_KEY
-    chain_id = get_chain_id(chain)
+    config = get_api_config(chain)
     
-    # URL chuẩn V2
-    url = f"{BASE_URL_V2}?chainid={chain_id}&module=account&action=tokentx&address={address}&page=1&offset=50&sort=desc&apikey={key}"
+    url = f"{config['url']}?module=account&action=tokentx&address={address}&page=1&offset=50&sort=desc&apikey={key}"
+    for k, v in config['params_extra'].items():
+        url += f"&{k}={v}"
     
     try:
         res = requests.get(url, timeout=5).json()
@@ -67,7 +75,6 @@ def get_token_tx(address, chain="BSC", api_key=None):
                 
                 time = datetime.fromtimestamp(int(tx.get('timeStamp', 0)))
                 
-                # Phân loại MUA/BÁN
                 if tx['to'].lower() == address.lower():
                     direction = "IN (BUY) 🟢"
                     color = "#00ff9f"
@@ -90,7 +97,7 @@ def get_token_tx(address, chain="BSC", api_key=None):
         elif res['message'] == 'No transactions found':
             return None, "ℹ️ Ví này chưa có giao dịch Token nào."
         else:
-            return None, f"API V2 Error: {res.get('message')} - {res.get('result')}"
+            return None, f"{chain} API Error: {res.get('message')} - {res.get('result')}"
             
     except Exception as e:
         return None, f"Connect Error: {str(e)}"
