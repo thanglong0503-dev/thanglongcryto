@@ -379,57 +379,90 @@ elif mode == "📰 NEWS RADAR":
 
 # ==============================================================================
 # ==============================================================================
-# MODE 4: ON-CHAIN STALKER (SOI VÍ ĐA MẠNG)
+# MODE 4: ON-CHAIN STALKER (BẢN FINAL V47)
 # ==============================================================================
 elif mode == "🐋 WHALE TRACKER": 
-    st.markdown('<div class="glitch-header">🦈 MULTI-CHAIN STALKER</div>', unsafe_allow_html=True)
+    st.markdown('<div class="glitch-header">🦈 ON-CHAIN STALKER</div>', unsafe_allow_html=True)
     st.caption("Spy on Whales across Binance Smart Chain & Ethereum")
 
     # 1. CẤU HÌNH SOI
-    c1, c2 = st.columns([1, 2])
+    c1, c2 = st.columns([1, 3])
     with c1:
-        # Chọn mạng (Key của Ngài dùng được cả 2)
+        # Chọn mạng
         chain_opt = st.selectbox("NETWORK", ["BSC", "ETH"])
     with c2:
-        # Nhập API Key
-        user_api = st.text_input("YOUR API KEY (Etherscan/BscScan)", type="password", placeholder="Paste your API Key here...")
+        # Nhập Key (Có hướng dẫn rõ ràng)
+        key_placeholder = "Paste BscScan Key here..." if chain_opt == "BSC" else "Paste Etherscan Key here..."
+        user_api = st.text_input(f"YOUR {chain_opt} API KEY (Optional):", type="password", placeholder=key_placeholder)
 
     # 2. NHẬP VÍ MỤC TIÊU
-    target_wallet = st.text_input("TARGET WALLET ADDRESS (0x...):", value="", placeholder="Ex: 0x8894...")
+    target_wallet = st.text_input("TARGET WALLET ADDRESS (0x...):", value="", placeholder="Ex: 0x8894e0a0c962cb723c1976a4421c95949be2d4e3")
 
+    # 3. NÚT QUÉT
     if st.button("🛰️ SCAN WALLET ACTIVITIES"):
+        # Kiểm tra định dạng ví cơ bản
         if len(target_wallet) == 42 and target_wallet.startswith("0x"):
             try:
                 from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol
                 
-                # ... (Phần code cũ trong Mode 4) ...
-
-                with st.spinner(f"ACCESSING {chain_opt} BLOCKCHAIN..."):
-                    # A. Lấy số dư (Hàm mới trả về 2 giá trị: số dư và lỗi)
+                with st.spinner(f"HACKING INTO {chain_opt} BLOCKCHAIN..."):
+                    
+                    # A. LẤY SỐ DƯ (Native Balance)
                     native_bal, err_bal = get_wallet_balance(target_wallet, chain_opt, user_api)
                     native_sym = get_native_symbol(chain_opt)
                     
-                    # B. Lấy lịch sử giao dịch
+                    # B. LẤY GIAO DỊCH (Token Transfers)
                     df_tx, err_tx = get_token_tx(target_wallet, chain_opt, user_api)
                     
-                    # C. HIỂN THỊ KẾT QUẢ HOẶC LỖI
+                    # --- HIỂN THỊ KẾT QUẢ ---
+                    
+                    # 1. Hiển thị Số Dư (Hoặc Lỗi nếu có)
                     if err_bal:
-                        st.error(err_bal) # <--- In lỗi to đùng ra đây nếu sai Key
+                        st.error(f"⚠️ BALANCE ERROR: {err_bal}")
+                        st.caption("👉 Gợi ý: Kiểm tra lại API Key xem có đúng mạng (BSC vs ETH) chưa?")
                     
                     st.markdown(f"""
-                    <div style="text-align:center; margin-bottom:20px; border:1px solid #444; padding:15px; border-radius:10px; background:rgba(0,0,0,0.3)">
-                        <div style="color:#aaa; font-size:12px">NATIVE BALANCE</div>
-                        <div style="font-size:32px; font-weight:bold; color:#fff; font-family:'Orbitron'">
-                            {native_bal:,.4f} <span style="color:#ffcc00; font-size:20px">{native_sym}</span>
+                    <div style="text-align:center; margin-bottom:20px; border:1px solid #333; padding:15px; border-radius:10px; background:rgba(20,20,20,0.8)">
+                        <div style="color:#888; font-size:12px; letter-spacing:2px">NATIVE BALANCE</div>
+                        <div style="font-size:36px; font-weight:bold; color:#fff; font-family:'Orbitron'; text-shadow: 0 0 10px rgba(255,255,255,0.3)">
+                            {native_bal:,.4f} <span style="color:#ffcc00; font-size:24px">{native_sym}</span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
+                    # 2. Hiển thị Giao Dịch
                     if df_tx is not None and not df_tx.empty:
-                        # ... (Giữ nguyên phần hiển thị bảng giao dịch) ...
-                        st.dataframe(df_tx) # Hoặc code hiển thị cũ
-                    elif err_tx:
-                        st.warning(err_tx) # <--- In lỗi của phần Token
+                        st.markdown(f"### 📜 LATEST MOVES ({len(df_tx)} txs)")
+                        
+                        for index, row in df_tx.iterrows():
+                            # Thẻ hiển thị từng giao dịch
+                            st.markdown(f"""
+                            <div class="glass-card" style="border-left: 4px solid {row['COLOR']}; margin-bottom:8px; padding:12px">
+                                <div style="display:flex; justify-content:space-between; align-items:center">
+                                    <div style="display:flex; align-items:center; gap:10px">
+                                        <span style="font-weight:bold; font-size:18px; color:#fff">{row['SYMBOL']}</span>
+                                        <span style="font-size:11px; color:#888; font-family:'monospace'">{row['TIME']}</span>
+                                    </div>
+                                    <div style="text-align:right">
+                                        <div style="color:{row['COLOR']}; font-weight:bold; font-size:12px; background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; display:inline-block">{row['TYPE']}</div>
+                                        <div style="color:#fff; font-size:16px; font-weight:bold; margin-top:2px">{row['AMOUNT']:,.2f}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        # Nếu không có giao dịch hoặc lỗi
+                        if err_tx:
+                            st.warning(f"⚠️ TRANSACTION LOG: {err_tx}")
+                        else:
+                            st.info("ℹ️ Ví này đang ngủ đông (Không có giao dịch Token gần đây).")
+                        
+            except ImportError:
+                st.error("❌ Lỗi File: Chưa tìm thấy file 'backend/wallet_stalker.py'. Hãy tạo file này trước!")
+            except Exception as e:
+                st.error(f"❌ SYSTEM ERROR: {e}")
+        else:
+            st.error("⚠️ Địa chỉ ví không hợp lệ! (Phải bắt đầu bằng '0x' và dài 42 ký tự)")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
 st.markdown("""
