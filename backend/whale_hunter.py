@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 
-# --- CẤU HÌNH HEADERS ĐỂ GIẢ LẬP TRÌNH DUYỆT ---
+# --- CẤU HÌNH HEADERS (QUAN TRỌNG ĐỂ KHÔNG BỊ CHẶN) ---
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Content-Type": "application/json",
@@ -15,69 +15,78 @@ def get_leaderboard_positions(encrypted_uid):
     
     try:
         res = requests.post(url, json=payload, headers=HEADERS, timeout=5).json()
-        if res['success'] and res['data']:
+        # Leaderboard dùng key 'success'
+        if res.get('success') and res.get('data'):
             return process_data(res['data']['otherPositionRetList'])
-        return None, "⚠️ Không tìm thấy vị thế (Leaderboard)."
+        return None, "⚠️ Không tìm thấy vị thế hoặc Trader ẩn danh sách."
     except Exception as e:
-        return None, f"❌ Lỗi kết nối: {str(e)}"
+        return None, f"❌ Lỗi Leaderboard: {str(e)}"
 
 def get_copy_trade_positions(portfolio_id):
     """CÁCH 2: Lấy lệnh từ Smart Money/Copy Trade (ID toàn số)"""
-    # API Cổng sau của Smart Money
     url = "https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/position-list"
     payload = {"portfolioId": str(portfolio_id)}
     
     try:
         res = requests.post(url, json=payload, headers=HEADERS, timeout=5).json()
-        if res['success'] and res['data']:
-            # Copy Trade trả về cấu trúc hơi khác, cần map lại
-            raw_list = res['data']
-            return process_data_copy_trade(raw_list)
-        return None, "⚠️ Trader này đang ẩn lệnh hoặc không có vị thế."
+        
+        # --- FIX LỖI: KIỂM TRA LINH HOẠT CẢ 'success' VÀ 'code' ---
+        # Binance Smart Money đôi khi trả về 'code': '000000' thay vì 'success': True
+        is_success = (res.get('success') is True) or (res.get('code') == '000000')
+        
+        if is_success:
+            data_list = res.get('data')
+            if data_list and len(data_list) > 0:
+                return process_data_copy_trade(data_list)
+            else:
+                return None, "⚠️ Trader này đang KHÔNG CÓ LỆNH (Trống)."
+        else:
+            # Nếu API trả về lỗi, in ra message của Binance để debug
+            err_msg = res.get('message', 'Unknown Error')
+            return None, f"⚠️ Binance chặn: {err_msg}"
+            
     except Exception as e:
-        return None, f"❌ Lỗi kết nối Smart Money: {str(e)}"
+        return None, f"❌ Lỗi Smart Money: {str(e)}"
 
 def process_data(data_list):
-    """Xử lý dữ liệu Leaderboard chuẩn"""
-    if not data_list: return None, "Trader đang cầm tiền mặt (No Positions)."
+    """Xử lý dữ liệu Leaderboard"""
+    if not data_list: return None, "No Data"
     df = pd.DataFrame(data_list)
-    df = df[['symbol', 'entryPrice', 'markPrice', 'amount', 'pnl', 'roe', 'updateTime']]
-    df.columns = ['SYMBOL', 'ENTRY', 'MARK', 'SIZE', 'PNL ($)', 'ROI (%)', 'TIME']
-    df['TIME'] = pd.to_datetime(df['TIME'], unit='ms')
+    # Lọc cột an toàn (chỉ lấy nếu tồn tại)
+    cols = {'symbol': 'SYMBOL', 'entryPrice': 'ENTRY', 'markPrice': 'MARK', 'amount': 'SIZE', 'pnl': 'PNL ($)', 'roe': 'ROI (%)', 'updateTime': 'TIME'}
+    # Đổi tên các cột khớp
+    df = df.rename(columns=cols)
+    # Chỉ giữ lại các cột cần thiết có trong df
+    valid_cols = [c for c in cols.values() if c in df.columns]
+    df = df[valid_cols]
+    
+    if 'TIME' in df.columns:
+        df['TIME'] = pd.to_datetime(df['TIME'], unit='ms')
     return df, "OK"
 
 def process_data_copy_trade(data_list):
-    """Xử lý dữ liệu Copy Trade (Cấu trúc khác)"""
-    if not data_list: return None, "Trader đang cầm tiền mặt (No Positions)."
-    
-    # Map các trường của Copy Trade sang chuẩn chung
-    # api copy trade: symbol, entryPrice, breakEvenPrice, positionAmount, unrealizedProfit, unrealizedProfitRate
+    """Xử lý dữ liệu Copy Trade (Cấu trúc khác biệt)"""
     cleaned = []
     for item in data_list:
+        # Map dữ liệu thủ công để tránh lỗi thiếu cột
         cleaned.append({
             'SYMBOL': item.get('symbol'),
-            'ENTRY': item.get('entryPrice'),
-            'MARK': item.get('markPrice', 0), # Đôi khi không có mark price
-            'SIZE': item.get('positionAmount'),
-            'PNL ($)': item.get('unrealizedProfit'),
-            'ROI (%)': float(item.get('unrealizedProfitRate', 0)) * 100, # Nó trả về số thập phân (0.3 -> 30%)
-            'TIME': pd.Timestamp.now() # Copy trade API ko trả về updateTime, lấy giờ hiện tại
+            'ENTRY': float(item.get('entryPrice', 0)),
+            'MARK': float(item.get('markPrice', 0)),
+            'SIZE': float(item.get('positionAmount', 0)),
+            'PNL ($)': float(item.get('unrealizedProfit', 0)),
+            # Copy trade trả về ROI dạng thập phân (0.3), cần nhân 100
+            'ROI (%)': float(item.get('unrealizedProfitRate', 0)) * 100,
+            'TIME': "Live" # Copy trade API không trả về time update
         })
         
     df = pd.DataFrame(cleaned)
     return df, "OK"
 
 def scan_whale(input_id):
-    """
-    BỘ NÃO TRUNG TÂM: Tự động phân loại ID
-    - Nếu toàn số -> Gọi Copy Trade API
-    - Nếu có chữ -> Gọi Leaderboard API
-    """
+    """BỘ NÃO: Tự động chọn API dựa vào input"""
     input_id = str(input_id).strip()
-    
     if input_id.isdigit():
-        # Đây là Portfolio ID (Smart Money)
         return get_copy_trade_positions(input_id)
     else:
-        # Đây là Encrypted UID (Leaderboard)
         return get_leaderboard_positions(input_id)
