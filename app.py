@@ -379,131 +379,134 @@ elif mode == "📰 NEWS RADAR":
 
 # ==============================================================================
 # ==============================================================================
-# MODE 4: ON-CHAIN STALKER (BẢN CÓ SỔ TAY BOOKMARK)
+# MODE 4: ON-CHAIN COMMAND CENTER (V51 - DASHBOARD & USD)
 # ==============================================================================
 elif mode == "🐋 WHALE TRACKER": 
-    st.markdown('<div class="glitch-header">🦈 ON-CHAIN STALKER</div>', unsafe_allow_html=True)
-    st.caption("Spy on Whales & Manage your Target List")
-
-    # Import quản lý ví
+    st.markdown('<div class="glitch-header">🦈 ON-CHAIN COMMAND CENTER</div>', unsafe_allow_html=True)
+    
+    # Import
     try:
         from backend.wallet_manager import load_book, add_shark, delete_shark
+        from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol, get_current_prices
+        import plotly.express as px # Thư viện vẽ biểu đồ
+        
         saved_sharks = load_book()
-    except:
-        st.error("Thiếu file backend/wallet_manager.py!")
+        prices = get_current_prices() # Lấy giá USD hiện tại (ETH, BTC...)
+    except Exception as e:
+        st.error(f"System Error: {e}")
         st.stop()
 
-    # --- KHU VỰC 1: CẤU HÌNH & CHỌN VÍ ---
+    # --- INPUT SECTION ---
     c1, c2 = st.columns([1, 2])
-    
     with c1:
-        chain_opt = st.selectbox("NETWORK", ["ETH", "BSC"])
-        
-        # DROPDOWN CHỌN CÁ MẬP TỪ SỔ TAY
-        # Tạo danh sách tên để hiển thị
+        chain_opt = "ETH" # Mặc định ETH cho ổn định
+        st.markdown(f"**NETWORK: {chain_opt}** (Auto-Selected)")
         shark_names = ["🔍 ...Type Manually..."] + [f"{s['name']}" for s in saved_sharks]
-        selected_shark_name = st.selectbox("📂 BOOKMARKS (SAVED WALLETS)", shark_names)
-
+        selected_shark = st.selectbox("📂 BOOKMARKS", shark_names)
+    
     with c2:
-        # Xử lý Logic chọn ví
         default_val = ""
-        if selected_shark_name != "🔍 ...Type Manually...":
-            # Tìm địa chỉ tương ứng với tên đã chọn
+        if selected_shark != "🔍 ...Type Manually...":
             for s in saved_sharks:
-                if s['name'] == selected_shark_name:
-                    default_val = s['address']
-                    break
+                if s['name'] == selected_shark: default_val = s['address']
         
-        target_wallet = st.text_input("TARGET WALLET ADDRESS:", value=default_val, placeholder="0x...")
+        target_wallet = st.text_input("TARGET WALLET:", value=default_val, placeholder="0x...")
+    
+    # --- SCAN BUTTON ---
+    user_api = st.text_input("API KEY (Optional):", type="password") # Ẩn bớt cho gọn
 
-    # --- KHU VỰC 2: QUẢN LÝ (THÊM / XÓA) ---
-    with st.expander("⚙️ QUẢN LÝ DANH BẠ (THÊM / XÓA VÍ)"):
-        col_add, col_del = st.columns(2)
-        
-        # Thêm ví mới
-        with col_add:
-            st.markdown("**➕ THÊM VÍ MỚI**")
-            new_name = st.text_input("Tên gợi nhớ (Ví dụ: Cá mập A)", key="new_name")
-            new_addr = st.text_input("Địa chỉ ví (0x...)", key="new_addr")
-            if st.button("LƯU LẠI"):
-                if new_name and new_addr:
-                    ok, msg = add_shark(new_name, new_addr)
-                    if ok: st.success(msg)
-                    else: st.warning(msg)
-                    st.rerun() # Load lại trang để cập nhật danh sách
-                else:
-                    st.warning("Nhập đủ tên và ví nhé!")
-
-        # Xóa ví đang chọn
-        with col_del:
-            st.markdown("**🗑️ XÓA VÍ ĐANG CHỌN**")
-            if selected_shark_name != "🔍 ...Type Manually...":
-                st.write(f"Đang chọn: **{selected_shark_name}**")
-                if st.button("XÓA KHỎI SỔ"):
-                    # Tìm địa chỉ để xóa
-                    addr_to_del = next((s['address'] for s in saved_sharks if s['name'] == selected_shark_name), None)
-                    if addr_to_del:
-                        ok, msg = delete_shark(addr_to_del)
-                        if ok: st.success(msg)
-                        st.rerun()
-            else:
-                st.info("Hãy chọn một ví trong danh sách để xóa.")
-
-    # --- KHU VỰC 3: QUÉT (GIỮ NGUYÊN CODE CŨ) ---
-    # Nhập Key (Ẩn bớt cho gọn)
-    user_api = st.text_input("API KEY (Optional):", type="password", placeholder="Paste Key if needed...")
-
-    if st.button("🛰️ SCAN WALLET ACTIVITIES"):
-        if len(target_wallet) == 42 and target_wallet.startswith("0x"):
-            try:
-                from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol
+    if st.button("🛰️ ANALYZE WALLET"):
+        if len(target_wallet) == 42:
+            with st.spinner("DECODING BLOCKCHAIN DATA..."):
+                # 1. LẤY SỐ DƯ & PHÂN LOẠI CÁ
+                native_bal, err = get_wallet_balance(target_wallet, chain_opt, user_api)
+                native_sym = get_native_symbol(chain_opt)
                 
-                with st.spinner(f"HACKING INTO {chain_opt} BLOCKCHAIN..."):
-                    
-                    # A. LẤY SỐ DƯ
-                    native_bal, err_bal = get_wallet_balance(target_wallet, chain_opt, user_api)
-                    native_sym = get_native_symbol(chain_opt)
-                    
-                    # B. LẤY GIAO DỊCH
-                    df_tx, err_tx = get_token_tx(target_wallet, chain_opt, user_api)
-                    
-                    # HIỂN THỊ
-                    if err_bal: st.error(f"⚠️ BALANCE ERROR: {err_bal}")
-                    
-                    st.markdown(f"""
-                    <div style="text-align:center; margin-bottom:20px; border:1px solid #333; padding:15px; border-radius:10px; background:rgba(20,20,20,0.8)">
-                        <div style="color:#888; font-size:12px; letter-spacing:2px">NATIVE BALANCE</div>
-                        <div style="font-size:36px; font-weight:bold; color:#fff; font-family:'Orbitron'; text-shadow: 0 0 10px rgba(255,255,255,0.3)">
-                            {native_bal:,.4f} <span style="color:#ffcc00; font-size:24px">{native_sym}</span>
-                        </div>
+                # Tính giá trị USD của tài sản gốc (ETH)
+                eth_price = prices.get('ETH', 0)
+                native_usd = native_bal * eth_price
+                
+                # Phân loại Cá (Shark Class)
+                shark_class = "🦐 SHRIMP (Tép)"
+                if native_usd > 10000: shark_class = "🐬 DOLPHIN (Cá Heo)"
+                if native_usd > 100000: shark_class = "🦈 SHARK (Cá Mập)"
+                if native_usd > 1000000: shark_class = "🐋 WHALE (Cá Voi)"
+                if native_usd > 10000000: shark_class = "👑 KRAKEN (Vua Biển)"
+
+                # HIỂN THỊ THẺ SỐ DƯ
+                st.markdown(f"""
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:20px; border-radius:10px; border:1px solid #333; margin-bottom:20px">
+                    <div>
+                        <div style="color:#888; font-size:12px">NATIVE HOLDING</div>
+                        <div style="font-size:32px; font-weight:bold; color:#fff">{native_bal:,.4f} {native_sym}</div>
+                        <div style="color:#00ff9f; font-size:16px">≈ ${native_usd:,.2f} USD</div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div style="text-align:right">
+                        <div style="color:#aaa; font-size:12px">WALLET CLASS</div>
+                        <div style="font-size:24px; font-weight:bold; color:#ffcc00">{shark_class}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # 2. LẤY GIAO DỊCH & VẼ BIỂU ĐỒ
+                df, err_tx = get_token_tx(target_wallet, chain_opt, user_api)
+                
+                if df is not None and not df.empty:
+                    # --- DASHBOARD: BIỂU ĐỒ TRÒN (PIE CHART) ---
+                    # Lọc lệnh MUA (IN) để xem họ gom gì
+                    df_buy = df[df['TYPE'] == 'IN']
+                    if not df_buy.empty:
+                        # Gom nhóm theo Token
+                        df_chart = df_buy.groupby('SYMBOL')['AMOUNT'].sum().reset_index()
+                        # Lấy Top 5 token mua nhiều nhất
+                        df_chart = df_chart.sort_values(by='AMOUNT', ascending=False).head(5)
+                        
+                        st.markdown("### 📊 RECENT ACCUMULATION (HỌ ĐANG GOM GÌ?)")
+                        fig = px.pie(df_chart, values='AMOUNT', names='SYMBOL', 
+                                     title='Portfolio Allocation (Based on recent Inflows)',
+                                     hole=0.4, color_discrete_sequence=px.colors.sequential.Plasma)
+                        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
+                        st.plotly_chart(fig, use_container_width=True)
                     
-                    if df_tx is not None and not df_tx.empty:
-                        st.markdown(f"### 📜 LATEST MOVES ({len(df_tx)} txs)")
-                        for index, row in df_tx.iterrows():
-                            st.markdown(f"""
-                            <div class="glass-card" style="border-left: 4px solid {row['COLOR']}; margin-bottom:8px; padding:12px">
-                                <div style="display:flex; justify-content:space-between; align-items:center">
-                                    <div style="display:flex; align-items:center; gap:10px">
-                                        <span style="font-weight:bold; font-size:18px; color:#fff">{row['SYMBOL']}</span>
-                                        <span style="font-size:11px; color:#888; font-family:'monospace'">{row['TIME']}</span>
-                                    </div>
-                                    <div style="text-align:right">
-                                        <div style="color:{row['COLOR']}; font-weight:bold; font-size:12px; background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; display:inline-block">{row['TYPE']}</div>
-                                        <div style="color:#fff; font-size:16px; font-weight:bold; margin-top:2px">{row['AMOUNT']:,.2f}</div>
-                                    </div>
+                    # --- LIST GIAO DỊCH CHI TIẾT (CÓ USD) ---
+                    st.markdown("### 📜 TRANSACTION LEDGER")
+                    for index, row in df.iterrows():
+                        # Logic quy đổi giá USD sơ bộ (Ước tính)
+                        token_usd_val = "---"
+                        sym = row['SYMBOL'].upper()
+                        
+                        # Chỉ quy đổi các coin phổ biến để tránh sai lệch
+                        if sym in ["ETH", "WETH"]: 
+                            val = row['AMOUNT'] * prices.get('ETH', 0)
+                            token_usd_val = f"${val:,.2f}"
+                        elif sym in ["WBTC", "BTC"]: 
+                            val = row['AMOUNT'] * prices.get('BTC', 0)
+                            token_usd_val = f"${val:,.2f}"
+                        elif sym in ["USDT", "USDC", "DAI"]: 
+                            val = row['AMOUNT'] * 1.0
+                            token_usd_val = f"${val:,.2f}"
+                        
+                        # Hiển thị
+                        st.markdown(f"""
+                        <div class="glass-card" style="border-left: 4px solid {row['COLOR']}; margin-bottom:8px; padding:10px; display:flex; justify-content:space-between; align-items:center">
+                            <div style="display:flex; align-items:center; gap:12px">
+                                <span style="font-weight:bold; font-size:18px; color:#fff">{row['SYMBOL']}</span>
+                                <div>
+                                    <div style="font-size:12px; color:#888">{row['TIME']}</div>
+                                    <div style="font-size:11px; color:#555">Hash: {row.get('HASH', '')[:6]}...</div>
                                 </div>
                             </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        if err_tx: st.warning(f"⚠️ LOG: {err_tx}")
-                        else: st.info("ℹ️ Ví này đang ngủ đông.")
-                        
-            except Exception as e:
-                st.error(f"❌ SYSTEM ERROR: {e}")
+                            <div style="text-align:right">
+                                <div style="color:{row['COLOR']}; font-weight:bold; font-size:12px">{row['TYPE']}</div>
+                                <div style="color:#fff; font-size:16px; font-weight:bold">{row['AMOUNT']:,.4f}</div>
+                                <div style="color:#aaa; font-size:12px">{token_usd_val}</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Ví này chưa có giao dịch Token nào gần đây.")
         else:
-            st.error("⚠️ Địa chỉ ví không hợp lệ!")
+            st.warning("⚠️ Vui lòng nhập địa chỉ ví hợp lệ!")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
 st.markdown("""
