@@ -3,67 +3,61 @@ import pandas as pd
 from datetime import datetime
 
 # --- CẤU HÌNH ---
-# Key Demo dùng chung cho ai không có key
-DEMO_KEY = "YourApiKeyToken"
+# Dùng API CoinGecko để lấy giá (Free, không cần Key)
+PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,bitcoin,binancecoin,tether,usd-coin&vs_currencies=usd"
 
+def get_current_prices():
+    """Lấy giá USD của các đồng coin chủ chốt"""
+    try:
+        res = requests.get(PRICE_API, timeout=3).json()
+        return {
+            "ETH": res.get('ethereum', {}).get('usd', 0),
+            "BTC": res.get('bitcoin', {}).get('usd', 0),
+            "BNB": res.get('binancecoin', {}).get('usd', 0),
+            "USDT": 1.0,
+            "USDC": 1.0,
+            "DAI": 1.0
+        }
+    except:
+        return {"ETH": 0, "BTC": 0, "BNB": 0} # Nếu lỗi thì trả về 0 để không crash app
+
+# --- CẤU HÌNH API ETHERSCAN V2 ---
 def get_api_config(chain):
-    """
-    CHIẾN THUẬT HYBRID V49:
-    - ETH: Dùng cổng Etherscan V2 (Cần Key Etherscan)
-    - BSC: Dùng cổng BscScan V1 (Dùng Key Demo nếu ko có key riêng)
-    """
     if chain == "BSC":
-        return {
-            "url": "https://api.bscscan.com/api",
-            "params_extra": {} # BscScan V1 cũ ko cần chainid, chạy free ổn
-        }
+        return {"url": "https://api.bscscan.com/api", "params_extra": {}}
     else: # ETH
-        return {
-            "url": "https://api.etherscan.io/v2/api",
-            "params_extra": {"chainid": "1"} # ETH ID = 1
-        }
+        return {"url": "https://api.etherscan.io/v2/api", "params_extra": {"chainid": "1"}}
 
 def get_native_symbol(chain):
     return "BNB" if chain == "BSC" else "ETH"
 
-def get_wallet_balance(address, chain="BSC", api_key=None):
-    # Nếu không nhập Key, dùng Key Demo
-    key = api_key if api_key and len(api_key) > 5 else DEMO_KEY
+def get_wallet_balance(address, chain="ETH", api_key=None):
+    # (Giữ nguyên logic cũ, chỉ đổi tên hàm cho gọn)
     config = get_api_config(chain)
-    
-    # Tạo URL
-    url = f"{config['url']}?module=account&action=balance&address={address}&tag=latest&apikey={key}"
-    for k, v in config['params_extra'].items():
-        url += f"&{k}={v}"
+    url = f"{config['url']}?module=account&action=balance&address={address}&tag=latest"
+    if api_key and len(api_key) > 5: url += f"&apikey={api_key}"
+    for k, v in config['params_extra'].items(): url += f"&{k}={v}"
     
     try:
         res = requests.get(url, timeout=5).json()
-        
         if res['status'] == '1':
-            val = float(res['result']) / 10**18
-            return val, None
-        else:
-            # Sửa thông báo lỗi để dễ nhận diện V49
-            return 0, f"{chain} System Error: {res.get('message')} - {res.get('result')}"
-            
+            return float(res['result']) / 10**18, None
+        return 0, f"Error: {res.get('message')}"
     except Exception as e:
-        return 0, f"Connect Error: {str(e)}"
+        return 0, str(e)
 
-def get_token_tx(address, chain="BSC", api_key=None):
-    key = api_key if api_key and len(api_key) > 5 else DEMO_KEY
+def get_token_tx(address, chain="ETH", api_key=None):
+    # (Logic cũ nhưng thêm cột Date để vẽ biểu đồ)
     config = get_api_config(chain)
-    
-    url = f"{config['url']}?module=account&action=tokentx&address={address}&page=1&offset=50&sort=desc&apikey={key}"
-    for k, v in config['params_extra'].items():
-        url += f"&{k}={v}"
+    url = f"{config['url']}?module=account&action=tokentx&address={address}&page=1&offset=100&sort=desc" # Lấy 100 lệnh để vẽ biểu đồ cho đẹp
+    if api_key and len(api_key) > 5: url += f"&apikey={api_key}"
+    for k, v in config['params_extra'].items(): url += f"&{k}={v}"
     
     try:
         res = requests.get(url, timeout=5).json()
-        
         if res['status'] == '1' and res['result']:
             txs = res['result']
             data = []
-            
             for tx in txs:
                 symbol = tx.get('tokenSymbol', '???')
                 if len(symbol) > 10: continue
@@ -71,20 +65,23 @@ def get_token_tx(address, chain="BSC", api_key=None):
                     dec = int(tx.get('tokenDecimal', 18))
                     val = float(tx.get('value', 0)) / (10 ** dec)
                 except: val = 0
-                time = datetime.fromtimestamp(int(tx.get('timeStamp', 0)))
                 
-                direction = "IN (BUY) 🟢" if tx['to'].lower() == address.lower() else "OUT (SELL) 🔴"
-                color = "#00ff9f" if direction.startswith("IN") else "#ff0055"
+                ts = int(tx.get('timeStamp', 0))
+                time_obj = datetime.fromtimestamp(ts)
+                
+                direction = "IN" if tx['to'].lower() == address.lower() else "OUT"
+                color = "#00ff9f" if direction == "IN" else "#ff0055"
                 
                 if val > 0:
-                    data.append({'TIME': time, 'SYMBOL': symbol, 'AMOUNT': val, 'TYPE': direction, 'COLOR': color, 'HASH': tx.get('hash', '')})
-            
+                    data.append({
+                        'TIME': time_obj.strftime("%Y-%m-%d %H:%M:%S"),
+                        'DATE': time_obj.strftime("%Y-%m-%d"), # Cột này dùng để group biểu đồ
+                        'SYMBOL': symbol,
+                        'AMOUNT': val,
+                        'TYPE': direction,
+                        'COLOR': color
+                    })
             return pd.DataFrame(data), None
-        
-        elif res['message'] == 'No transactions found':
-            return None, "ℹ️ Ví này chưa có giao dịch Token nào."
-        else:
-            return None, f"{chain} System Error: {res.get('message')} - {res.get('result')}"
-            
+        return None, "No Data"
     except Exception as e:
-        return None, f"Connect Error: {str(e)}"
+        return None, str(e)
