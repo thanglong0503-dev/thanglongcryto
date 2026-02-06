@@ -379,23 +379,23 @@ elif mode == "📰 NEWS RADAR":
 
 # ==============================================================================
 # ==============================================================================
-# MODE 4: ON-CHAIN COMMAND CENTER (V57 - USD CHART & TOP MOVES)
+# MODE 4: ON-CHAIN COMMAND CENTER (V58 - FULL FEATURES)
 # ==============================================================================
 elif mode == "🐋 WHALE TRACKER": 
     st.markdown('<div class="glitch-header">🦈 ON-CHAIN COMMAND CENTER</div>', unsafe_allow_html=True)
     
     try:
-        from backend.wallet_manager import load_book
+        from backend.wallet_manager import load_book, add_shark, delete_shark
         from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol, get_current_prices
         import plotly.express as px 
         saved_sharks = load_book()
-        prices = get_current_prices() # Lấy giá Realtime từ Binance
+        prices = get_current_prices() 
     except: st.stop()
 
-    # --- KHU VỰC NHẬP LIỆU ---
+    # --- KHU VỰC 1: CHỌN VÍ & NHẬP LIỆU ---
     c1, c2 = st.columns([1, 2])
     with c1:
-        st.markdown(f"**NETWORK: ETH**") # Mặc định ETH cho ổn định
+        st.markdown(f"**NETWORK: ETH**") 
         shark_names = ["🔍 ...Type Manually..."] + [f"{s['name']}" for s in saved_sharks]
         selected_shark = st.selectbox("📂 BOOKMARKS", shark_names)
     with c2:
@@ -404,15 +404,47 @@ elif mode == "🐋 WHALE TRACKER":
             for s in saved_sharks:
                 if s['name'] == selected_shark: default_val = s['address']
         target_wallet = st.text_input("TARGET WALLET:", value=default_val, placeholder="0x...")
-    
+
+    # --- KHU VỰC 2: QUẢN LÝ DANH BẠ (ĐÃ KHÔI PHỤC) ---
+    with st.expander("⚙️ QUẢN LÝ DANH BẠ (THÊM / XÓA VÍ)"):
+        col_add, col_del = st.columns(2)
+        
+        # Thêm ví mới
+        with col_add:
+            st.markdown("**➕ THÊM VÍ MỚI**")
+            new_name = st.text_input("Tên gợi nhớ (Ví dụ: Cá mập gom PEPE)", key="new_name")
+            new_addr = st.text_input("Địa chỉ ví (0x...)", key="new_addr")
+            if st.button("LƯU LẠI"):
+                if new_name and new_addr:
+                    ok, msg = add_shark(new_name, new_addr)
+                    if ok: st.success(msg)
+                    else: st.warning(msg)
+                    st.rerun() 
+                else:
+                    st.warning("Nhập đủ tên và ví nhé!")
+
+        # Xóa ví đang chọn
+        with col_del:
+            st.markdown("**🗑️ XÓA VÍ ĐANG CHỌN**")
+            if selected_shark != "🔍 ...Type Manually...":
+                st.write(f"Đang chọn: **{selected_shark}**")
+                if st.button("XÓA KHỎI SỔ"):
+                    addr_to_del = next((s['address'] for s in saved_sharks if s['name'] == selected_shark), None)
+                    if addr_to_del:
+                        ok, msg = delete_shark(addr_to_del)
+                        if ok: st.success(msg)
+                        st.rerun()
+            else:
+                st.info("Hãy chọn một ví trong danh sách để xóa.")
+
+    # --- KHU VỰC 3: QUÉT & PHÂN TÍCH (GIỮ NGUYÊN V57) ---
     user_api = st.text_input("API KEY (Optional):", type="password")
 
-    # --- NÚT BẤM & XỬ LÝ ---
     if st.button("🛰️ ANALYZE MONEY FLOW"):
         if len(target_wallet) == 42:
             with st.spinner("CALCULATING NET WORTH..."):
                 
-                # 1. LẤY SỐ DƯ GỐC
+                # 1. LẤY SỐ DƯ & GIÁ TRỊ GỐC
                 native_bal, err = get_wallet_balance(target_wallet, "ETH", user_api)
                 native_usd = native_bal * prices['ETH']
                 
@@ -421,27 +453,22 @@ elif mode == "🐋 WHALE TRACKER":
                 
                 max_wealth_detected = native_usd 
                 
-                # --- BƯỚC QUAN TRỌNG: TÍNH CỘT USD_VALUE CHO DATAFRAME ---
                 if df is not None and not df.empty:
-                    # Hàm tính giá trị USD cho từng dòng
+                    # Hàm tính giá
                     def calc_usd(row):
                         sym = row['SYMBOL'].upper()
                         amt = row['AMOUNT']
-                        # Chỉ định giá các Coin Top (Tránh coin rác làm nhiễu biểu đồ)
                         if sym in ["USDT", "USDC", "DAI", "FDUSD", "TUSD", "PYUSD", "GUSD"]: return amt
                         if sym in ["WBTC", "BTC", "CBTC", "TBTC"]: return amt * prices['BTC']
                         if sym in ["WETH", "ETH", "STETH", "RETH", "WSTETH"]: return amt * prices['ETH']
                         if sym in ["BNB", "WBNB"]: return amt * prices['BNB']
-                        return 0 # Coin rác / Coin lạ -> Giá trị = 0
+                        return 0 
                     
-                    # Áp dụng hàm tính giá
                     df['USD_VALUE'] = df.apply(calc_usd, axis=1)
-                    
-                    # Tìm con số lớn nhất từng cầm để xếp hạng
                     max_tx = df['USD_VALUE'].max()
                     if max_tx > max_wealth_detected: max_wealth_detected = max_tx
 
-                # 3. XẾP HẠNG (RANKING)
+                # 3. XẾP HẠNG
                 rank_title = "🦐 PLANKTON (Vi Sinh)"
                 rank_color = "#888"
                 if max_wealth_detected > 1000: rank_title = "🦀 CRAB (Cua)"
@@ -451,7 +478,7 @@ elif mode == "🐋 WHALE TRACKER":
                 if max_wealth_detected > 10000000: rank_title = "🐋 WHALE (Cá Voi)"; rank_color = "#ff0055"
                 if max_wealth_detected > 100000000: rank_title = "👑 LEVIATHAN (Thủy Quái)"; rank_color = "#aa00ff"
 
-                # 4. HIỂN THỊ THẺ TÀI SẢN
+                # HIỂN THỊ THẺ TÀI SẢN
                 st.markdown(f"""
                 <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:20px; border-radius:10px; border:1px solid #333; margin-bottom:20px">
                     <div>
@@ -467,34 +494,26 @@ elif mode == "🐋 WHALE TRACKER":
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # --- PHẦN MỚI: BIỂU ĐỒ & TOP GIAO DỊCH (2 CỘT) ---
+                # 4. BIỂU ĐỒ & TOP MOVES
                 if df is not None and not df.empty:
                     col_chart, col_top = st.columns(2)
                     
-                    # CỘT 1: BIỂU ĐỒ TRÒN (THEO GIÁ TRỊ USD)
                     with col_chart:
                         st.markdown("### 📊 REAL PORTFOLIO (USD)")
-                        # Lọc lệnh MUA (IN) và có giá trị > 10$ để vẽ
                         df_chart = df[(df['TYPE'].str.contains("IN")) & (df['USD_VALUE'] > 10)]
-                        
                         if not df_chart.empty:
-                            # Gom nhóm theo Symbol và tính tổng tiền USD
                             df_pie = df_chart.groupby('SYMBOL')['USD_VALUE'].sum().reset_index()
-                            
                             fig = px.pie(df_pie, values='USD_VALUE', names='SYMBOL', 
                                          hole=0.5, color_discrete_sequence=px.colors.sequential.Plasma_r)
                             fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"},
                                               showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
                             st.plotly_chart(fig, use_container_width=True)
                         else:
-                            st.info("Không đủ dữ liệu định giá để vẽ biểu đồ.")
+                            st.info("Chưa đủ dữ liệu định giá để vẽ biểu đồ.")
 
-                    # CỘT 2: TOP GIAO DỊCH KHỦNG (XẾP THEO GIÁ TRỊ)
                     with col_top:
                         st.markdown("### 🏆 BIGGEST MOVES")
-                        # Lọc ra các lệnh có giá trị > 0, sắp xếp GIẢM DẦN theo USD
                         df_top = df[df['USD_VALUE'] > 0].sort_values(by='USD_VALUE', ascending=False).head(5)
-                        
                         for index, row in df_top.iterrows():
                             st.markdown(f"""
                             <div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; border-left:3px solid #ffcc00">
@@ -509,11 +528,10 @@ elif mode == "🐋 WHALE TRACKER":
                             </div>
                             """, unsafe_allow_html=True)
                     
-                    # --- DANH SÁCH CHI TIẾT (FULL LOG) ---
+                    # LOG CHI TIẾT
                     st.markdown("### 📜 FULL ACTIVITY LOG")
                     for index, row in df.iterrows():
                         val_display = f"${row['USD_VALUE']:,.0f}" if row['USD_VALUE'] > 0 else "---"
-                        
                         st.markdown(f"""
                         <div class="glass-card" style="border-left: 4px solid {row['COLOR']}; margin-bottom:8px; padding:10px; display:flex; justify-content:space-between; align-items:center">
                             <div style="display:flex; align-items:center; gap:12px">
@@ -527,7 +545,6 @@ elif mode == "🐋 WHALE TRACKER":
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
-
         else:
             st.warning("⚠️ Vui lòng nhập địa chỉ ví hợp lệ!")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
