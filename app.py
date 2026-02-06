@@ -378,58 +378,64 @@ elif mode == "📰 NEWS RADAR":
             st.error("⚠️ SIGNAL LOST: Cannot connect to News Feed. Check internet connection.")
 
 # ==============================================================================
-# ... Bên trong elif mode == "🐋 WHALE TRACKER": ...
-
+# MODE 4: WHALE TRACKER (THEO DÕI CÁ MẬP) - DÁN VÀO CUỐI APP.PY
+# ==============================================================================
+elif mode == "🐋 WHALE TRACKER":
+    st.markdown('<div class="glitch-header">🐋 WHALE HUNTER SONAR</div>', unsafe_allow_html=True)
     st.caption("Spy on Binance Top Traders (Supports both Leaderboard & Copy Trade IDs)")
 
-    # Input ID đa năng
+    # 1. Ô NHẬP ID (Mấu chốt là đây!)
     target_uid = st.text_input("ENTER ID (Encrypted UID or Portfolio ID):", 
                               value="", 
-                              placeholder="Ex: D3F... (Leaderboard) or 465... (Smart Money)")
+                              placeholder="Paste ID here (Ex: 4656... or D3F5...)")
     
+    # 2. NÚT QUÉT
     if st.button("🛰️ SCAN POSITIONS"):
         if target_uid:
             # Gọi hàm quét thông minh từ whale_hunter
-            from backend.whale_hunter import scan_whale
-            
-            with st.spinner("HACKING BINANCE MAINFRAME..."):
-                df_whale, msg = scan_whale(target_uid)
+            try:
+                from backend.whale_hunter import scan_whale
                 
-                if df_whale is not None:
-                    # Tính tổng PnL để hiển thị cho ngầu
-                    total_pnl = df_whale['PNL ($)'].sum()
-                    pnl_color = "#00ff9f" if total_pnl >= 0 else "#ff0055"
+                with st.spinner("HACKING BINANCE MAINFRAME..."):
+                    df_whale, msg = scan_whale(target_uid)
                     
-                    st.markdown(f"""
-                    <div style="text-align:center; margin-bottom:20px">
-                        <span style="font-size:16px; color:#888">LIVE PNL ESTIMATE</span><br>
-                        <span style="font-size:32px; font-weight:bold; color:{pnl_color}">${total_pnl:,.2f}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Hiển thị từng lệnh
-                    for index, row in df_whale.iterrows():
-                        roi_color = "#00ff9f" if row['ROI (%)'] > 0 else "#ff0055"
-                        direction = "LONG 🟢" if row['SIZE'] > 0 else "SHORT 🔴"
+                    if df_whale is not None:
+                        # Tính tổng PnL
+                        total_pnl = df_whale['PNL ($)'].sum()
+                        pnl_color = "#00ff9f" if total_pnl >= 0 else "#ff0055"
                         
                         st.markdown(f"""
-                        <div class="glass-card" style="border-left: 4px solid {roi_color}">
-                            <div style="display:flex; justify-content:space-between; align-items:center">
-                                <div>
-                                    <span style="font-size:20px; font-weight:bold; color:#fff">{row['SYMBOL']}</span>
-                                    <span style="background:#333; padding:2px 8px; border-radius:4px; font-size:12px; margin-left:10px">{direction}</span>
-                                </div>
-                                <span style="font-size:18px; font-weight:bold; color:{roi_color}">{row['ROI (%)']:.2f}%</span>
-                            </div>
-                            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-top:10px; font-size:12px; color:#aaa">
-                                <div>ENTRY: <span style="color:#fff">{row['ENTRY']}</span></div>
-                                <div>SIZE: <span style="color:#fff">{row['SIZE']}</span></div>
-                                <div>PNL: <span style="color:{roi_color}">${row['PNL ($)']:,.2f}</span></div>
-                            </div>
+                        <div style="text-align:center; margin-bottom:20px; border:1px solid #333; padding:10px; border-radius:10px">
+                            <span style="font-size:16px; color:#888">LIVE PNL ESTIMATE</span><br>
+                            <span style="font-size:32px; font-weight:bold; color:{pnl_color}">${total_pnl:,.2f}</span>
                         </div>
                         """, unsafe_allow_html=True)
-                else:
-                    st.warning(msg)
+                        
+                        # Hiển thị từng lệnh
+                        for index, row in df_whale.iterrows():
+                            roi_color = "#00ff9f" if row['ROI (%)'] > 0 else "#ff0055"
+                            direction = "LONG 🟢" if row['SIZE'] > 0 else "SHORT 🔴"
+                            
+                            st.markdown(f"""
+                            <div class="glass-card" style="border-left: 4px solid {roi_color}; margin-bottom:10px">
+                                <div style="display:flex; justify-content:space-between; align-items:center">
+                                    <div>
+                                        <span style="font-size:20px; font-weight:bold; color:#fff">{row['SYMBOL']}</span>
+                                        <span style="background:#333; padding:2px 8px; border-radius:4px; font-size:12px; margin-left:10px">{direction}</span>
+                                    </div>
+                                    <span style="font-size:18px; font-weight:bold; color:{roi_color}">{row['ROI (%)']:.2f}%</span>
+                                </div>
+                                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-top:10px; font-size:12px; color:#aaa">
+                                    <div>ENTRY: <span style="color:#fff">{row['ENTRY']}</span></div>
+                                    <div>SIZE: <span style="color:#fff">{row['SIZE']}</span></div>
+                                    <div>PNL: <span style="color:{roi_color}">${row['PNL ($)']:,.2f}</span></div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.warning(msg)
+            except Exception as e:
+                st.error(f"MODULE ERROR: {e}. (Ngài đã tạo file backend/whale_hunter.py chưa?)")
         else:
             st.info("⚠️ Hãy nhập UID hoặc Portfolio ID để bắt đầu quét.")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
