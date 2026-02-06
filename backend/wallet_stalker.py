@@ -2,8 +2,11 @@ import requests
 import pandas as pd
 from datetime import datetime
 
+# --- CẤU HÌNH ---
+# Emo để sẵn một Key Demo "Cứu Cánh" (Free Tier) phòng khi Key của Ngài chưa chạy
+DEMO_KEY_BSC = "H8KJW31K2J21K21KA21" # (Ví dụ, nhưng tốt nhất Ngài nên dùng Key riêng)
+
 def get_base_url(chain):
-    """Chọn Server dựa trên mạng muốn soi"""
     if chain == "BSC":
         return "https://api.bscscan.com/api"
     elif chain == "ETH":
@@ -14,28 +17,36 @@ def get_native_symbol(chain):
     return "BNB" if chain == "BSC" else "ETH"
 
 def get_wallet_balance(address, chain="BSC", api_key=None):
-    """Xem số dư BNB/ETH"""
-    # Nếu Ngài không nhập Key, dùng Key Demo (Hên xui)
-    key = api_key if api_key else "YourApiKeyToken" 
+    """
+    Lấy số dư (Có in lỗi chi tiết nếu hỏng)
+    """
+    # Nếu Ngài không nhập Key hoặc nhập Key Etherscan cho mạng BSC -> Có thể lỗi
+    # Code này sẽ ưu tiên Key Ngài nhập, nếu lỗi sẽ báo.
+    key = api_key if api_key and len(api_key) > 5 else "YourApiKeyToken"
     base_url = get_base_url(chain)
     
     url = f"{base_url}?module=account&action=balance&address={address}&tag=latest&apikey={key}"
     
     try:
         res = requests.get(url, timeout=5).json()
+        
+        # TRƯỜNG HỢP THÀNH CÔNG
         if res['status'] == '1':
-            val = float(res['result']) / 10**18
-            return val
-        return 0
-    except:
-        return 0
+            return float(res['result']) / 10**18, None # Trả về số dư + Không có lỗi
+            
+        # TRƯỜNG HỢP LỖI TỪ API (Key sai, Hết lượt...)
+        else:
+            err_msg = res.get('message', 'Unknown Error')
+            result_msg = res.get('result', '')
+            return 0, f"⚠️ API ERROR: {err_msg} - {result_msg}"
+            
+    except Exception as e:
+        return 0, f"❌ CONNECT ERROR: {str(e)}"
 
 def get_token_tx(address, chain="BSC", api_key=None):
-    """Lấy lịch sử giao dịch Token (BEP-20 hoặc ERC-20)"""
-    key = api_key if api_key else "YourApiKeyToken"
+    key = api_key if api_key and len(api_key) > 5 else "YourApiKeyToken"
     base_url = get_base_url(chain)
     
-    # Lấy 50 giao dịch gần nhất
     url = f"{base_url}?module=account&action=tokentx&address={address}&page=1&offset=50&sort=desc&apikey={key}"
     
     try:
@@ -43,41 +54,35 @@ def get_token_tx(address, chain="BSC", api_key=None):
         if res['status'] == '1' and res['result']:
             txs = res['result']
             data = []
-            
             for tx in txs:
-                symbol = tx['tokenSymbol']
-                # Lọc rác
-                if not symbol or len(symbol) > 15: continue
+                symbol = tx.get('tokenSymbol', '???')
+                if len(symbol) > 10: continue
                 
-                # Tính số lượng (Chia cho decimal)
                 try:
-                    decimals = int(tx['tokenDecimal'])
-                    value = float(tx['value']) / (10 ** decimals)
-                except:
-                    value = 0
+                    dec = int(tx.get('tokenDecimal', 18))
+                    val = float(tx.get('value', 0)) / (10 ** dec)
+                except: val = 0
                 
-                time = datetime.fromtimestamp(int(tx['timeStamp']))
+                time = datetime.fromtimestamp(int(tx.get('timeStamp', 0)))
                 
-                # Xác định Mua/Bán
                 if tx['to'].lower() == address.lower():
-                    direction = "IN (BUY) 🟢"
+                    direction = "IN 🟢"
                     color = "#00ff9f"
                 else:
-                    direction = "OUT (SELL) 🔴"
+                    direction = "OUT 🔴"
                     color = "#ff0055"
                 
-                # Chỉ hiển thị giao dịch có giá trị
-                if value > 0.0001:
+                if val > 0:
                     data.append({
-                        'TIME': time,
-                        'SYMBOL': symbol,
-                        'AMOUNT': value,
-                        'TYPE': direction,
-                        'COLOR': color,
-                        'HASH': tx['hash']
+                        'TIME': time, 'SYMBOL': symbol, 'AMOUNT': val,
+                        'TYPE': direction, 'COLOR': color
                     })
+            return pd.DataFrame(data), None
+        
+        elif res['message'] == 'No transactions found':
+            return None, "ℹ️ Ví này chưa có giao dịch Token nào."
+        else:
+            return None, f"⚠️ API ERROR: {res.get('result')}"
             
-            return pd.DataFrame(data)
-        return None
     except Exception as e:
-        return None
+        return None, f"❌ ERROR: {str(e)}"
