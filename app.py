@@ -378,66 +378,72 @@ elif mode == "📰 NEWS RADAR":
             st.error("⚠️ SIGNAL LOST: Cannot connect to News Feed. Check internet connection.")
 
 # ==============================================================================
-# MODE 4: WHALE TRACKER (THEO DÕI CÁ MẬP) - DÁN VÀO CUỐI APP.PY
 # ==============================================================================
-elif mode == "🐋 WHALE TRACKER":
-    st.markdown('<div class="glitch-header">🐋 WHALE HUNTER SONAR</div>', unsafe_allow_html=True)
-    st.caption("Spy on Binance Top Traders (Supports both Leaderboard & Copy Trade IDs)")
+# MODE 4: ON-CHAIN STALKER (SOI VÍ ĐA MẠNG)
+# ==============================================================================
+elif mode == "🐋 WHALE TRACKER": 
+    st.markdown('<div class="glitch-header">🦈 MULTI-CHAIN STALKER</div>', unsafe_allow_html=True)
+    st.caption("Spy on Whales across Binance Smart Chain & Ethereum")
 
-    # 1. Ô NHẬP ID (Mấu chốt là đây!)
-    target_uid = st.text_input("ENTER ID (Encrypted UID or Portfolio ID):", 
-                              value="", 
-                              placeholder="Paste ID here (Ex: 4656... or D3F5...)")
-    
-    # 2. NÚT QUÉT
-    if st.button("🛰️ SCAN POSITIONS"):
-        if target_uid:
-            # Gọi hàm quét thông minh từ whale_hunter
+    # 1. CẤU HÌNH SOI
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        # Chọn mạng (Key của Ngài dùng được cả 2)
+        chain_opt = st.selectbox("NETWORK", ["BSC", "ETH"])
+    with c2:
+        # Nhập API Key
+        user_api = st.text_input("YOUR API KEY (Etherscan/BscScan)", type="password", placeholder="Paste your API Key here...")
+
+    # 2. NHẬP VÍ MỤC TIÊU
+    target_wallet = st.text_input("TARGET WALLET ADDRESS (0x...):", value="", placeholder="Ex: 0x8894...")
+
+    if st.button("🛰️ SCAN WALLET ACTIVITIES"):
+        if len(target_wallet) == 42 and target_wallet.startswith("0x"):
             try:
-                from backend.whale_hunter import scan_whale
+                from backend.wallet_stalker import get_wallet_balance, get_token_tx, get_native_symbol
                 
-                with st.spinner("HACKING BINANCE MAINFRAME..."):
-                    df_whale, msg = scan_whale(target_uid)
+                with st.spinner(f"ACCESSING {chain_opt} BLOCKCHAIN..."):
+                    # A. Lấy số dư Coin nền tảng (BNB/ETH)
+                    native_bal = get_wallet_balance(target_wallet, chain_opt, user_api)
+                    native_sym = get_native_symbol(chain_opt)
                     
-                    if df_whale is not None:
-                        # Tính tổng PnL
-                        total_pnl = df_whale['PNL ($)'].sum()
-                        pnl_color = "#00ff9f" if total_pnl >= 0 else "#ff0055"
-                        
-                        st.markdown(f"""
-                        <div style="text-align:center; margin-bottom:20px; border:1px solid #333; padding:10px; border-radius:10px">
-                            <span style="font-size:16px; color:#888">LIVE PNL ESTIMATE</span><br>
-                            <span style="font-size:32px; font-weight:bold; color:{pnl_color}">${total_pnl:,.2f}</span>
+                    # B. Lấy lịch sử giao dịch Token
+                    df_tx = get_token_tx(target_wallet, chain_opt, user_api)
+                    
+                    # C. HIỂN THỊ KẾT QUẢ
+                    st.markdown(f"""
+                    <div style="text-align:center; margin-bottom:20px; border:1px solid #444; padding:15px; border-radius:10px; background:rgba(0,0,0,0.3)">
+                        <div style="color:#aaa; font-size:12px">NATIVE BALANCE</div>
+                        <div style="font-size:32px; font-weight:bold; color:#fff; font-family:'Orbitron'">
+                            {native_bal:,.4f} <span style="color:#ffcc00; font-size:20px">{native_sym}</span>
                         </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Hiển thị từng lệnh
-                        for index, row in df_whale.iterrows():
-                            roi_color = "#00ff9f" if row['ROI (%)'] > 0 else "#ff0055"
-                            direction = "LONG 🟢" if row['SIZE'] > 0 else "SHORT 🔴"
-                            
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if df_tx is not None and not df_tx.empty:
+                        st.subheader(f"📜 RECENT MOVES ON {chain_opt}")
+                        for index, row in df_tx.iterrows():
                             st.markdown(f"""
-                            <div class="glass-card" style="border-left: 4px solid {roi_color}; margin-bottom:10px">
+                            <div class="glass-card" style="border-left: 3px solid {row['COLOR']}; padding:10px; margin-bottom:8px">
                                 <div style="display:flex; justify-content:space-between; align-items:center">
-                                    <div>
-                                        <span style="font-size:20px; font-weight:bold; color:#fff">{row['SYMBOL']}</span>
-                                        <span style="background:#333; padding:2px 8px; border-radius:4px; font-size:12px; margin-left:10px">{direction}</span>
+                                    <div style="display:flex; align-items:center; gap:10px">
+                                        <span style="font-weight:bold; font-size:18px; color:#fff">{row['SYMBOL']}</span>
+                                        <span style="font-size:10px; color:#888">{row['TIME']}</span>
                                     </div>
-                                    <span style="font-size:18px; font-weight:bold; color:{roi_color}">{row['ROI (%)']:.2f}%</span>
-                                </div>
-                                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-top:10px; font-size:12px; color:#aaa">
-                                    <div>ENTRY: <span style="color:#fff">{row['ENTRY']}</span></div>
-                                    <div>SIZE: <span style="color:#fff">{row['SIZE']}</span></div>
-                                    <div>PNL: <span style="color:{roi_color}">${row['PNL ($)']:,.2f}</span></div>
+                                    <div style="text-align:right">
+                                        <div style="color:{row['COLOR']}; font-weight:bold; font-size:12px">{row['TYPE']}</div>
+                                        <div style="color:#fff; font-size:14px">{row['AMOUNT']:,.2f}</div>
+                                    </div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
-                        st.warning(msg)
+                        st.info(f"ℹ️ Không tìm thấy giao dịch Token nào gần đây trên mạng {chain_opt}.")
+                        
             except Exception as e:
-                st.error(f"MODULE ERROR: {e}. (Ngài đã tạo file backend/whale_hunter.py chưa?)")
+                st.error(f"MODULE ERROR: {e}")
         else:
-            st.info("⚠️ Hãy nhập UID hoặc Portfolio ID để bắt đầu quét.")
+            st.warning("⚠️ Địa chỉ ví không hợp lệ (Phải bắt đầu bằng 0x...).")
 # FOOTER: ĐÁNH DẤU CHỦ QUYỀN (LUÔN HIỆN Ở DƯỚI CÙNG)
 # ==============================================================================
 st.markdown("""
